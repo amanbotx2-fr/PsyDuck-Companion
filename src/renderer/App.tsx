@@ -9,6 +9,8 @@ import {
   PsyDuck,
   type PsyDuckAnimationController,
 } from './components/PsyDuck';
+import { SpeechBubble } from './components/SpeechBubble';
+import { useSpeechBubble } from './hooks/useSpeechBubble';
 
 const PLACEHOLDER_BEHAVIORS: readonly BehaviorId[] = [
   BEHAVIOR_IDS.think,
@@ -25,6 +27,7 @@ export function App() {
   const animationControllerRef = useRef<PsyDuckAnimationController | null>(
     null,
   );
+  const speechBubble = useSpeechBubble();
 
   const handleAnimationControllerChange = useCallback(
     (controller: PsyDuckAnimationController | null) => {
@@ -112,8 +115,53 @@ export function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!import.meta.env.DEV) {
+      return;
+    }
+
+    const previousShow = window.show;
+    const previousHide = window.hide;
+    const previousClearQueue = window.clearQueue;
+
+    window.show = speechBubble.show;
+    window.hide = speechBubble.hide;
+    window.clearQueue = speechBubble.clearQueue;
+
+    return () => {
+      if (window.show === speechBubble.show) {
+        if (previousShow === undefined) {
+          delete window.show;
+        } else {
+          window.show = previousShow;
+        }
+      }
+
+      if (window.hide === speechBubble.hide) {
+        if (previousHide === undefined) {
+          delete window.hide;
+        } else {
+          window.hide = previousHide;
+        }
+      }
+
+      if (window.clearQueue === speechBubble.clearQueue) {
+        if (previousClearQueue === undefined) {
+          delete window.clearQueue;
+        } else {
+          window.clearQueue = previousClearQueue;
+        }
+      }
+    };
+  }, [speechBubble.clearQueue, speechBubble.hide, speechBubble.show]);
+
   return (
     <main className="app-shell" aria-label="PsyDuck desktop companion">
+      <SpeechBubble
+        message={speechBubble.currentMessage}
+        visibility={speechBubble.visibility}
+        onExitTransitionEnd={speechBubble.notifyExitTransitionEnd}
+      />
       <PsyDuck
         onAnimationControllerChange={handleAnimationControllerChange}
       />
