@@ -1,30 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 
-import idleFrame001 from '../../../character/animations/idle/idle_001.png';
-import idleFrame002 from '../../../character/animations/idle/idle_002.png';
-import idleFrame003 from '../../../character/animations/idle/idle_003.png';
-import idleFrame004 from '../../../character/animations/idle/idle_004.png';
-import idleFrame005 from '../../../character/animations/idle/idle_005.png';
-import idleFrame006 from '../../../character/animations/idle/idle_006.png';
 import { AnimationEngine } from '../../engine/AnimationEngine';
+import {
+  AnimationRegistry,
+  type AnimationFrameModules,
+} from '../../engine/AnimationRegistry';
 import { DragController } from '../../engine/DragController';
 import { EyeTracker } from '../../engine/EyeTracker';
 
-const IDLE_FRAMES = [
-  idleFrame001,
-  idleFrame002,
-  idleFrame003,
-  idleFrame004,
-  idleFrame005,
-  idleFrame006,
-] as const;
-
+const ANIMATION_ROOT = '../../../character/animations';
+const IDLE_ANIMATION_NAME = 'idle';
 const IDLE_FPS = 8;
 const CLOSED_EYES_FRAME_INDEX = 3;
 const PUPIL_MAX_X = 4;
 const PUPIL_MAX_Y = 3;
 const EYE_ORIGIN_X = 100;
 const EYE_ORIGIN_Y = 84;
+
+const animationFrameModules = import.meta.glob(
+  '../../../character/animations/*/*.{png,webp}',
+  { eager: true, import: 'default', query: '?url' },
+) as AnimationFrameModules;
+
+const animationRegistry = new AnimationRegistry();
+animationRegistry.registerFolders(ANIMATION_ROOT, animationFrameModules, {
+  fps: IDLE_FPS,
+  loop: false,
+  getAnimationOptions: (animationName) =>
+    animationName === IDLE_ANIMATION_NAME ? { loop: true } : undefined,
+});
+
+const idleAnimation = animationRegistry.require(IDLE_ANIMATION_NAME);
 
 const preloadFrame = (framePath: string): Promise<void> =>
   new Promise((resolve) => {
@@ -36,7 +42,7 @@ const preloadFrame = (framePath: string): Promise<void> =>
 
 export function PsyDuck() {
   const [currentFrame, setCurrentFrame] = useState({
-    path: IDLE_FRAMES[0],
+    path: idleAnimation.frames[0],
     index: 0,
   });
   const stageRef = useRef<HTMLDivElement>(null);
@@ -46,17 +52,17 @@ export function PsyDuck() {
 
   useEffect(() => {
     let disposed = false;
-    const animation = new AnimationEngine(IDLE_FRAMES, {
-      fps: IDLE_FPS,
-      loop: true,
+    const animation = new AnimationEngine({
+      registry: animationRegistry,
+      fallbackAnimationName: IDLE_ANIMATION_NAME,
       onFrameChange: (framePath, frameIndex) => {
         setCurrentFrame({ path: framePath, index: frameIndex });
       },
     });
 
-    void Promise.all(IDLE_FRAMES.map(preloadFrame)).then(() => {
+    void Promise.all(idleAnimation.frames.map(preloadFrame)).then(() => {
       if (!disposed) {
-        animation.start();
+        animation.play(IDLE_ANIMATION_NAME);
       }
     });
 
