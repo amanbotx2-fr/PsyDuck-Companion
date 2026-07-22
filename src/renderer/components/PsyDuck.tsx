@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { AnimationEngine } from '../../engine/AnimationEngine';
+import {
+  AnimationEngine,
+  type PlayAnimationOptions,
+} from '../../engine/AnimationEngine';
 import {
   AnimationRegistry,
   type AnimationFrameModules,
@@ -10,6 +13,7 @@ import { EyeTracker } from '../../engine/EyeTracker';
 
 const ANIMATION_ROOT = '../../../character/animations';
 const IDLE_ANIMATION_NAME = 'idle';
+const LOOK_LEFT_ANIMATION_NAME = 'look_left';
 const IDLE_FPS = 8;
 const CLOSED_EYES_FRAME_INDEX = 3;
 const PUPIL_MAX_X = 4;
@@ -31,6 +35,7 @@ animationRegistry.registerFolders(ANIMATION_ROOT, animationFrameModules, {
 });
 
 const idleAnimation = animationRegistry.require(IDLE_ANIMATION_NAME);
+const lookLeftAnimation = animationRegistry.require(LOOK_LEFT_ANIMATION_NAME);
 
 const preloadFrame = (framePath: string): Promise<void> =>
   new Promise((resolve) => {
@@ -40,10 +45,36 @@ const preloadFrame = (framePath: string): Promise<void> =>
     image.src = framePath;
   });
 
-export function PsyDuck() {
+export interface PsyDuckAnimationController {
+  readonly hasAnimation: (animationName: string) => boolean;
+  readonly playAnimation: (
+    animationName: string,
+    options?: PlayAnimationOptions,
+  ) => Promise<void>;
+}
+
+export interface PsyDuckProps {
+  readonly onAnimationControllerChange?: (
+    controller: PsyDuckAnimationController | null,
+  ) => void;
+}
+
+interface PendingPlayback {
+  readonly animationName: string;
+  readonly resolve: () => void;
+}
+
+const animationFramesToPreload = [
+  ...idleAnimation.frames,
+  ...lookLeftAnimation.frames,
+];
+
+export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
   const [currentFrame, setCurrentFrame] = useState({
     path: idleAnimation.frames[0],
     index: 0,
+    animationName: IDLE_ANIMATION_NAME,
+    flipX: false,
   });
   const stageRef = useRef<HTMLDivElement>(null);
   const eyesRef = useRef<HTMLDivElement>(null);
@@ -52,25 +83,69 @@ export function PsyDuck() {
 
   useEffect(() => {
     let disposed = false;
+    let pendingPlayback: PendingPlayback | null = null;
+
+    const settlePendingPlayback = (): void => {
+      pendingPlayback?.resolve();
+      pendingPlayback = null;
+    };
+
     const animation = new AnimationEngine({
       registry: animationRegistry,
       fallbackAnimationName: IDLE_ANIMATION_NAME,
-      onFrameChange: (framePath, frameIndex) => {
-        setCurrentFrame({ path: framePath, index: frameIndex });
+      onFrameChange: (
+        framePath,
+        frameIndex,
+        animationName,
+        presentation,
+      ) => {
+        setCurrentFrame({
+          path: framePath,
+          index: frameIndex,
+          animationName,
+          flipX: presentation.flipX,
+        });
+      },
+      onAnimationComplete: (animationName) => {
+        if (pendingPlayback?.animationName === animationName) {
+          settlePendingPlayback();
+        }
       },
     });
 
-    void Promise.all(idleAnimation.frames.map(preloadFrame)).then(() => {
+    const controller: PsyDuckAnimationController = {
+      hasAnimation: (animationName) => animationRegistry.has(animationName),
+      playAnimation: (animationName, options = {}) => {
+        const clip = animationRegistry.require(animationName);
+
+        settlePendingPlayback();
+
+        if (clip.loop) {
+          animation.play(animationName, options);
+          return Promise.resolve();
+        }
+
+        return new Promise<void>((resolve) => {
+          pendingPlayback = { animationName, resolve };
+          animation.play(animationName, options);
+        });
+      },
+    };
+
+    void Promise.all(animationFramesToPreload.map(preloadFrame)).then(() => {
       if (!disposed) {
         animation.play(IDLE_ANIMATION_NAME);
+        onAnimationControllerChange?.(controller);
       }
     });
 
     return () => {
       disposed = true;
+      onAnimationControllerChange?.(null);
       animation.stop();
+      settlePendingPlayback();
     };
-  }, []);
+  }, [onAnimationControllerChange]);
 
   useEffect(() => {
     const desktopBridge = window.psyduck;
@@ -151,6 +226,7 @@ export function PsyDuck() {
       ref={stageRef}
       className="psyduck-stage"
       data-dragging={dragging}
+      data-flip-x={currentFrame.flipX}
     >
       <img
         className="psyduck"
@@ -162,7 +238,10 @@ export function PsyDuck() {
         ref={eyesRef}
         className="psyduck-eyes"
         aria-hidden="true"
-        hidden={currentFrame.index === CLOSED_EYES_FRAME_INDEX}
+        hidden={
+          currentFrame.animationName !== IDLE_ANIMATION_NAME ||
+          currentFrame.index === CLOSED_EYES_FRAME_INDEX
+        }
       >
         <span className="psyduck-eye psyduck-eye--left">
           <span className="psyduck-pupil">

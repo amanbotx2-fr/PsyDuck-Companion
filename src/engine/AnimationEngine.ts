@@ -9,7 +9,12 @@ export type AnimationFrameListener = (
   framePath: string,
   frameIndex: number,
   animationName: string,
+  presentation: AnimationPresentation,
 ) => void;
+
+export interface AnimationPresentation {
+  readonly flipX: boolean;
+}
 
 export interface AnimationEngineOptions {
   readonly registry?: AnimationRegistry;
@@ -21,7 +26,15 @@ export interface AnimationEngineOptions {
 
 export interface PlayAnimationOptions {
   readonly restart?: boolean;
+  readonly flipX?: boolean;
 }
+
+const DEFAULT_PRESENTATION: AnimationPresentation = Object.freeze({
+  flipX: false,
+});
+const FLIPPED_PRESENTATION: AnimationPresentation = Object.freeze({
+  flipX: true,
+});
 
 export class AnimationEngine {
   private readonly registry: AnimationRegistry;
@@ -34,6 +47,7 @@ export class AnimationEngine {
     | ((animationName: string) => void)
     | undefined;
   private activeClip: AnimationClip | null = null;
+  private flipX = false;
   private frameIndex = 0;
   private animationFrameId: number | null = null;
   private previousTimestamp: number | null = null;
@@ -54,6 +68,10 @@ export class AnimationEngine {
 
   public get currentFrameIndex(): number {
     return this.frameIndex;
+  }
+
+  public get currentFlipX(): boolean {
+    return this.flipX;
   }
 
   public get isRunning(): boolean {
@@ -87,6 +105,7 @@ export class AnimationEngine {
       this.stop();
       this.activeClip = null;
       this.frameIndex = 0;
+      this.flipX = false;
     }
 
     return this.registry.unregister(name);
@@ -94,10 +113,12 @@ export class AnimationEngine {
 
   public play(name: string, options: PlayAnimationOptions = {}): void {
     const clip = this.registry.require(name);
+    const flipX = options.flipX ?? false;
 
     if (
       this.running &&
       this.activeClip?.name === clip.name &&
+      this.flipX === flipX &&
       options.restart !== true
     ) {
       return;
@@ -105,7 +126,7 @@ export class AnimationEngine {
 
     const wasRunning = this.running;
     this.running = true;
-    this.activateClip(clip);
+    this.activateClip(clip, flipX);
 
     if (!wasRunning) {
       this.scheduleUpdate();
@@ -207,7 +228,7 @@ export class AnimationEngine {
         : this.registry.get(this.fallbackAnimationName);
 
     if (fallbackClip !== undefined) {
-      this.activateClip(fallbackClip);
+      this.activateClip(fallbackClip, false);
       return;
     }
 
@@ -216,10 +237,11 @@ export class AnimationEngine {
     this.elapsedTime = 0;
   }
 
-  private activateClip(clip: AnimationClip): void {
+  private activateClip(clip: AnimationClip, flipX: boolean): void {
     const animationChanged = this.activeClip?.name !== clip.name;
     this.activeClip = clip;
     this.frameIndex = 0;
+    this.flipX = flipX;
     this.previousTimestamp = null;
     this.elapsedTime = 0;
 
@@ -235,7 +257,12 @@ export class AnimationEngine {
     const framePath = clip?.frames[this.frameIndex];
 
     if (clip !== null && framePath !== undefined) {
-      this.onFrameChange?.(framePath, this.frameIndex, clip.name);
+      this.onFrameChange?.(
+        framePath,
+        this.frameIndex,
+        clip.name,
+        this.flipX ? FLIPPED_PRESENTATION : DEFAULT_PRESENTATION,
+      );
     }
   }
 

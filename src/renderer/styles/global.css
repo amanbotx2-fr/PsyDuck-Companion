@@ -50,6 +50,11 @@ body {
   -webkit-user-drag: none;
 }
 
+.psyduck-stage[data-flip-x='true'] > .psyduck,
+.psyduck-stage[data-flip-x='true'] > .psyduck-eyes {
+  transform: scaleX(-1);
+}
+
 .psyduck-eyes {
   --pupil-x: 0px;
   --pupil-y: 0px;
