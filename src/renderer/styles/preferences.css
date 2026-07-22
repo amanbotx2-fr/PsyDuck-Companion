@@ -101,6 +101,10 @@ select {
   background: var(--accent-strong);
 }
 
+.save-status[data-status='dirty'] .save-status__dot {
+  background: oklch(68% 0.14 70);
+}
+
 .save-status[data-status='saved'] .save-status__dot,
 .save-status[data-status='ready'] .save-status__dot {
   background: oklch(58% 0.13 151);
@@ -261,14 +265,16 @@ select {
 
 .settings-switch:focus-visible,
 .settings-select:focus-visible,
-.settings-input:focus-visible {
+.settings-input:focus-visible,
+.settings-button:focus-visible {
   outline: 3px solid color-mix(in oklch, var(--focus) 34%, transparent);
   outline-offset: 2px;
 }
 
 .settings-switch:disabled,
 .settings-select:disabled,
-.settings-input:disabled {
+.settings-input:disabled,
+.settings-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -306,6 +312,72 @@ select {
   color: var(--faint);
 }
 
+.ai-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding-top: 18px;
+}
+
+.connection-status {
+  max-width: 38ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 560;
+  line-height: 1.45;
+}
+
+.connection-status[data-status='success'] {
+  color: oklch(48% 0.12 151);
+}
+
+.connection-status[data-status='error'] {
+  color: var(--danger);
+}
+
+.ai-settings-actions__buttons {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-button {
+  min-height: 36px;
+  padding: 6px 13px;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1;
+  cursor: pointer;
+  outline: none;
+  transition:
+    border-color 100ms ease-out,
+    background-color 100ms ease-out;
+}
+
+.settings-button--secondary {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.settings-button--secondary:not(:disabled):hover {
+  border-color: var(--accent-strong);
+}
+
+.settings-button--primary {
+  border-color: var(--accent-strong);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.settings-button--primary:not(:disabled):hover {
+  background: color-mix(in oklch, var(--accent) 86%, var(--surface));
+}
+
 .preferences-footer {
   padding-top: 2px;
   color: var(--faint);
@@ -334,6 +406,19 @@ select {
   .settings-select,
   .settings-input {
     width: 100%;
+  }
+
+  .ai-settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ai-settings-actions__buttons {
+    width: 100%;
+  }
+
+  .settings-button {
+    flex: 1;
   }
 }
 
@@ -367,7 +452,8 @@ select {
   .settings-switch,
   .settings-switch::after,
   .settings-select,
-  .settings-input {
+  .settings-input,
+  .settings-button {
     transition-duration: 1ms;
   }
 }
@@ -376,6 +462,7 @@ select {
   .settings-switch,
   .settings-select,
   .settings-input,
+  .settings-button,
   .placeholder-badge,
   .preferences-error {
     border-color: CanvasText;

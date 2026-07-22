@@ -6,4 +6,7 @@ export const IPC_CHANNELS = {
   getSettings: 'settings:get',
   updateSettings: 'settings:update',
   settingsChanged: 'settings:changed',
+  askAI: 'ai:ask',
+  listAIModels: 'ai:list-models',
+  testAIConnection: 'ai:test-connection',
 } as const;

@@ -37,6 +37,10 @@ export class SettingsService {
         await this.recoverInvalidFile();
       } else {
         this.settings = settings;
+
+        if (JSON.stringify(parsedSettings) !== JSON.stringify(settings)) {
+          await this.writeSnapshot(settings);
+        }
       }
     } catch (error) {
       if (!isFileNotFoundError(error)) {

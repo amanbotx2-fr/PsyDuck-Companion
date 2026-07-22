@@ -18,7 +18,7 @@ export interface SettingsController {
   readonly settings: AppSettings;
   readonly status: SettingsStatus;
   readonly errorMessage: string | null;
-  readonly update: (patch: SettingsPatch) => Promise<void>;
+  readonly update: (patch: SettingsPatch) => Promise<boolean>;
 }
 
 export function useSettings(): SettingsController {
@@ -78,13 +78,13 @@ export function useSettings(): SettingsController {
     };
   }, []);
 
-  const update = useCallback(async (patch: SettingsPatch): Promise<void> => {
+  const update = useCallback(async (patch: SettingsPatch): Promise<boolean> => {
     const desktopBridge = window.psyduck;
 
     if (desktopBridge === undefined) {
       setStatus('error');
       setErrorMessage('Settings are unavailable in this window.');
-      return;
+      return false;
     }
 
     const revision = updateRevisionRef.current + 1;
@@ -105,9 +105,11 @@ export function useSettings(): SettingsController {
         setSettings(savedSettings);
         setStatus('saved');
       }
+
+      return true;
     } catch {
       if (!mountedRef.current) {
-        return;
+        return false;
       }
 
       setStatus('error');
@@ -126,6 +128,8 @@ export function useSettings(): SettingsController {
       } catch {
         // The actionable save error remains visible.
       }
+
+      return false;
     }
   }, []);
 

@@ -1,4 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 
 import {
   AnimationEngine,
@@ -20,6 +25,7 @@ const PUPIL_MAX_X = 4;
 const PUPIL_MAX_Y = 3;
 const EYE_ORIGIN_X = 100;
 const EYE_ORIGIN_Y = 84;
+const ACTIVATION_MOVEMENT_TOLERANCE_PX = 5;
 const ANIMATION_LOOP_OPTIONS: Readonly<Record<string, boolean>> = {
   [IDLE_ANIMATION_NAME]: true,
   [BLINK_ANIMATION_NAME]: false,
@@ -65,7 +71,9 @@ export interface QueuedAnimationOptions extends PlayAnimationOptions {
 }
 
 export interface PsyDuckProps {
+  readonly activationEnabled?: boolean;
   readonly eyeTrackingEnabled?: boolean;
+  readonly onActivate?: () => void;
   readonly onAnimationControllerChange?: (
     controller: PsyDuckAnimationController | null,
   ) => void;
@@ -80,6 +88,13 @@ interface QueuedPlayback {
   readonly reject: (reason: unknown) => void;
 }
 
+interface ActivationPointer {
+  readonly pointerId: number;
+  readonly startScreenX: number;
+  readonly startScreenY: number;
+  moved: boolean;
+}
+
 const animationFramesToPreload = [
   ...new Set([
     ...idleAnimation.frames,
@@ -89,7 +104,9 @@ const animationFramesToPreload = [
 ];
 
 export function PsyDuck({
+  activationEnabled = true,
   eyeTrackingEnabled = true,
+  onActivate,
   onAnimationControllerChange,
 }: PsyDuckProps) {
   const [currentFrame, setCurrentFrame] = useState({
@@ -103,7 +120,73 @@ export function PsyDuck({
   const eyeTrackerRef = useRef<EyeTracker | null>(null);
   const draggingRef = useRef(false);
   const resumeQueuedPlaybackRef = useRef<(() => void) | null>(null);
+  const activationPointerRef = useRef<ActivationPointer | null>(null);
   const [dragging, setDragging] = useState(false);
+
+  const handlePointerDownCapture = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    if (
+      !activationEnabled ||
+      onActivate === undefined ||
+      event.button !== 0 ||
+      !event.isPrimary
+    ) {
+      activationPointerRef.current = null;
+      return;
+    }
+
+    activationPointerRef.current = {
+      pointerId: event.pointerId,
+      startScreenX: event.screenX,
+      startScreenY: event.screenY,
+      moved: false,
+    };
+  };
+
+  const handlePointerMoveCapture = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const activationPointer = activationPointerRef.current;
+
+    if (
+      activationPointer === null ||
+      activationPointer.pointerId !== event.pointerId ||
+      activationPointer.moved
+    ) {
+      return;
+    }
+
+    const distance = Math.hypot(
+      event.screenX - activationPointer.startScreenX,
+      event.screenY - activationPointer.startScreenY,
+    );
+
+    if (distance > ACTIVATION_MOVEMENT_TOLERANCE_PX) {
+      activationPointer.moved = true;
+    }
+  };
+
+  const handlePointerUpCapture = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const activationPointer = activationPointerRef.current;
+    activationPointerRef.current = null;
+
+    if (
+      activationPointer === null ||
+      activationPointer.pointerId !== event.pointerId ||
+      activationPointer.moved
+    ) {
+      return;
+    }
+
+    onActivate?.();
+  };
+
+  const handlePointerCancelCapture = (): void => {
+    activationPointerRef.current = null;
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -333,6 +416,10 @@ export function PsyDuck({
       className="psyduck-stage"
       data-dragging={dragging}
       data-flip-x={currentFrame.flipX}
+      onPointerDownCapture={handlePointerDownCapture}
+      onPointerMoveCapture={handlePointerMoveCapture}
+      onPointerUpCapture={handlePointerUpCapture}
+      onPointerCancelCapture={handlePointerCancelCapture}
     >
       <img
         className="psyduck"

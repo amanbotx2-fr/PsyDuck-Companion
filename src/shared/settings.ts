@@ -10,6 +10,58 @@ export const WATER_REMINDER_INTERVAL_OPTIONS = [
 export type WaterReminderInterval =
   (typeof WATER_REMINDER_INTERVAL_OPTIONS)[number];
 
+export const AI_PROVIDER_OPTIONS = [
+  {
+    id: 'openai',
+    label: 'OpenAI',
+    defaultModel: 'gpt-5.6-sol',
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    defaultModel: 'gemini-3.6-flash',
+  },
+  {
+    id: 'grok',
+    label: 'Grok',
+    defaultModel: 'grok-4.5',
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    defaultModel: '',
+  },
+] as const;
+
+export type AiProvider = (typeof AI_PROVIDER_OPTIONS)[number]['id'];
+export type AiProviderSelection = AiProvider | '';
+
+export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
+
+export const isAiProvider = (value: unknown): value is AiProvider =>
+  typeof value === 'string' &&
+  AI_PROVIDER_OPTIONS.some((provider) => provider.id === value);
+
+export const isValidAiEndpoint = (value: string): boolean => {
+  try {
+    const endpoint = new URL(value);
+
+    return (
+      (endpoint.protocol === 'http:' || endpoint.protocol === 'https:') &&
+      endpoint.username.length === 0 &&
+      endpoint.password.length === 0 &&
+      endpoint.search.length === 0 &&
+      endpoint.hash.length === 0
+    );
+  } catch {
+    return false;
+  }
+};
+
+export const getDefaultAiModel = (provider: AiProvider): string =>
+  AI_PROVIDER_OPTIONS.find((option) => option.id === provider)
+    ?.defaultModel ?? '';
+
 export interface GeneralSettings {
   readonly alwaysOnTop: boolean;
   readonly launchAtStartup: boolean;
@@ -23,8 +75,10 @@ export interface WaterSettings {
 
 export interface AiSettings {
   readonly enabled: boolean;
-  readonly provider: string;
+  readonly provider: AiProviderSelection;
+  readonly model: string;
   readonly apiKey: string;
+  readonly endpoint: string;
 }
 
 export interface AppSettings {
@@ -46,8 +100,10 @@ export interface WaterSettingsPatch {
 
 export interface AiSettingsPatch {
   readonly enabled?: boolean;
-  readonly provider?: string;
+  readonly provider?: AiProviderSelection;
+  readonly model?: string;
   readonly apiKey?: string;
+  readonly endpoint?: string;
 }
 
 export interface SettingsPatch {
@@ -69,7 +125,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   ai: {
     enabled: false,
     provider: '',
+    model: '',
     apiKey: '',
+    endpoint: DEFAULT_OLLAMA_ENDPOINT,
   },
 };
 
@@ -79,10 +137,18 @@ const GENERAL_SETTING_KEYS = [
   'eyeTracking',
 ] as const;
 const WATER_SETTING_KEYS = ['enabled', 'interval'] as const;
-const AI_SETTING_KEYS = ['enabled', 'provider', 'apiKey'] as const;
+const AI_SETTING_KEYS = [
+  'enabled',
+  'provider',
+  'model',
+  'apiKey',
+  'endpoint',
+] as const;
+const LEGACY_AI_SETTING_KEYS = ['enabled', 'provider', 'apiKey'] as const;
 const ROOT_SETTING_KEYS = ['general', 'water', 'ai'] as const;
-const MAXIMUM_PROVIDER_LENGTH = 128;
+const MAXIMUM_MODEL_LENGTH = 256;
 const MAXIMUM_API_KEY_LENGTH = 4_096;
+const MAXIMUM_ENDPOINT_LENGTH = 2_048;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -91,6 +157,11 @@ const hasOnlyKeys = (
   value: Record<string, unknown>,
   allowedKeys: readonly string[],
 ): boolean => Object.keys(value).every((key) => allowedKeys.includes(key));
+
+const hasEveryKey = (
+  value: Record<string, unknown>,
+  requiredKeys: readonly string[],
+): boolean => requiredKeys.every((key) => Object.hasOwn(value, key));
 
 export const isWaterReminderInterval = (
   value: unknown,
@@ -150,23 +221,32 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
     return null;
   }
 
-  const { enabled, provider, apiKey } = value;
+  const { enabled, provider, model, apiKey, endpoint } = value;
 
   if (
     (enabled !== undefined && typeof enabled !== 'boolean') ||
     (provider !== undefined &&
-      (typeof provider !== 'string' ||
-        provider.length > MAXIMUM_PROVIDER_LENGTH)) ||
+      provider !== '' &&
+      !isAiProvider(provider)) ||
+    (model !== undefined &&
+      (typeof model !== 'string' || model.length > MAXIMUM_MODEL_LENGTH)) ||
     (apiKey !== undefined &&
-      (typeof apiKey !== 'string' || apiKey.length > MAXIMUM_API_KEY_LENGTH))
+      (typeof apiKey !== 'string' ||
+        apiKey.length > MAXIMUM_API_KEY_LENGTH)) ||
+    (endpoint !== undefined &&
+      (typeof endpoint !== 'string' ||
+        endpoint.length > MAXIMUM_ENDPOINT_LENGTH ||
+        !isValidAiEndpoint(endpoint)))
   ) {
     return null;
   }
 
   return {
     ...(typeof enabled === 'boolean' ? { enabled } : {}),
-    ...(typeof provider === 'string' ? { provider } : {}),
+    ...(provider === '' || isAiProvider(provider) ? { provider } : {}),
+    ...(typeof model === 'string' ? { model } : {}),
     ...(typeof apiKey === 'string' ? { apiKey } : {}),
+    ...(typeof endpoint === 'string' ? { endpoint } : {}),
   };
 };
 
@@ -232,7 +312,8 @@ export const parseSettings = (value: unknown): AppSettings | null => {
     !isRecord(value.ai) ||
     Object.keys(value.general).length !== GENERAL_SETTING_KEYS.length ||
     Object.keys(value.water).length !== WATER_SETTING_KEYS.length ||
-    Object.keys(value.ai).length !== AI_SETTING_KEYS.length
+    !hasOnlyKeys(value.ai, AI_SETTING_KEYS) ||
+    !hasEveryKey(value.ai, LEGACY_AI_SETTING_KEYS)
   ) {
     return null;
   }

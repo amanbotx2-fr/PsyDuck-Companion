@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import type { AppSettings, SettingsPatch } from '../shared/settings';
 import type {
+  AIAskResult,
+  AIConnectionTestResult,
+  AIModelListResult,
   CursorPositionListener,
   DesktopBridge,
   ScreenPoint,
@@ -18,6 +21,9 @@ const IPC_CHANNELS = {
   getSettings: 'settings:get',
   updateSettings: 'settings:update',
   settingsChanged: 'settings:changed',
+  askAI: 'ai:ask',
+  listAIModels: 'ai:list-models',
+  testAIConnection: 'ai:test-connection',
 } as const;
 
 const desktopBridge: DesktopBridge = Object.freeze({
@@ -51,6 +57,16 @@ const desktopBridge: DesktopBridge = Object.freeze({
       IPC_CHANNELS.updateSettings,
       patch,
     ) as Promise<AppSettings>,
+  askAI: (prompt: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.askAI, prompt) as Promise<AIAskResult>,
+  listAIModels: () =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.listAIModels,
+    ) as Promise<AIModelListResult>,
+  testAIConnection: () =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.testAIConnection,
+    ) as Promise<AIConnectionTestResult>,
   onSettingsChanged: (listener: SettingsChangeListener) => {
     const handleSettingsChanged = (
       _event: Electron.IpcRendererEvent,

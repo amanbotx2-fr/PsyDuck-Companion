@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   BEHAVIOR_IDS,
@@ -10,6 +10,10 @@ import {
   PsyDuck,
   type PsyDuckAnimationController,
 } from './components/PsyDuck';
+import {
+  ChatInputBubble,
+  type ChatInputDismissReason,
+} from './components/ChatInputBubble';
 import { SpeechBubble } from './components/SpeechBubble';
 import { useSettings } from './hooks/useSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
@@ -25,9 +29,29 @@ const BLINK_BEHAVIOR_PRIORITY = 100;
 const MINIMUM_BLINK_INTERVAL_MS = 4_000;
 const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
 const WATER_REMINDER_DEVELOPMENT_INTERVAL_MS = 60_000;
+const MINIMUM_THINKING_DURATION_MS = 350;
+const AI_RESPONSE_DURATION_MS = 5_000;
 const SETTINGS_MANAGED_REMINDER_STORAGE = {
   getItem: () => null,
   setItem: () => undefined,
+};
+
+type AIInteractionState =
+  | { readonly phase: 'idle' }
+  | { readonly phase: 'input-open' }
+  | {
+      readonly phase: 'thinking';
+      readonly requestId: number;
+      readonly startedAt: number;
+    }
+  | {
+      readonly phase: 'showing-response';
+      readonly requestId: number;
+      readonly messageId: number;
+    };
+
+const INITIAL_AI_INTERACTION_STATE: AIInteractionState = {
+  phase: 'idle',
 };
 
 export function App() {
@@ -35,8 +59,28 @@ export function App() {
     null,
   );
   const waterReminderRef = useRef<WaterReminder | null>(null);
+  const aiInteractionRef = useRef<AIInteractionState>(
+    INITIAL_AI_INTERACTION_STATE,
+  );
+  const requestSequenceRef = useRef(0);
+  const submissionInProgressRef = useRef(false);
+  const responseDelayTimerRef = useRef<ReturnType<
+    typeof globalThis.setTimeout
+  > | null>(null);
+  const mountedRef = useRef(true);
+  const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
+    INITIAL_AI_INTERACTION_STATE,
+  );
   const { settings } = useSettings();
   const speechBubble = useSpeechBubble();
+
+  const transitionAIInteraction = useCallback(
+    (nextState: AIInteractionState): void => {
+      aiInteractionRef.current = nextState;
+      setAIInteraction(nextState);
+    },
+    [],
+  );
 
   const handleAnimationControllerChange = useCallback(
     (controller: PsyDuckAnimationController | null) => {
@@ -44,6 +88,188 @@ export function App() {
     },
     [],
   );
+
+  const showAIResponse = useCallback(
+    (requestId: number, responseText: string): void => {
+      if (
+        !mountedRef.current ||
+        aiInteractionRef.current.phase !== 'thinking' ||
+        aiInteractionRef.current.requestId !== requestId
+      ) {
+        return;
+      }
+
+      const normalizedResponse = responseText.trim();
+      speechBubble.clearQueue();
+      speechBubble.hide();
+      const messageId = speechBubble.show(
+        normalizedResponse.length > 0
+          ? normalizedResponse
+          : 'The provider returned an empty response.',
+        { duration: AI_RESPONSE_DURATION_MS },
+      );
+
+      submissionInProgressRef.current = false;
+      transitionAIInteraction({
+        phase: 'showing-response',
+        requestId,
+        messageId,
+      });
+    },
+    [
+      speechBubble.clearQueue,
+      speechBubble.hide,
+      speechBubble.show,
+      transitionAIInteraction,
+    ],
+  );
+
+  const scheduleAIResponse = useCallback(
+    (requestId: number, responseText: string, startedAt: number): void => {
+      const elapsedTime = performance.now() - startedAt;
+      const remainingDelay = Math.max(
+        MINIMUM_THINKING_DURATION_MS - elapsedTime,
+        0,
+      );
+
+      if (responseDelayTimerRef.current !== null) {
+        globalThis.clearTimeout(responseDelayTimerRef.current);
+      }
+
+      responseDelayTimerRef.current = globalThis.setTimeout(() => {
+        responseDelayTimerRef.current = null;
+        showAIResponse(requestId, responseText);
+      }, remainingDelay);
+    },
+    [showAIResponse],
+  );
+
+  const handlePsyDuckActivate = useCallback((): void => {
+    if (aiInteractionRef.current.phase !== 'idle') {
+      return;
+    }
+
+    submissionInProgressRef.current = false;
+    speechBubble.clearQueue();
+    speechBubble.hide();
+    transitionAIInteraction({ phase: 'input-open' });
+  }, [
+    speechBubble.clearQueue,
+    speechBubble.hide,
+    transitionAIInteraction,
+  ]);
+
+  const handleChatInputCancel = useCallback(
+    (_reason: ChatInputDismissReason): void => {
+      if (aiInteractionRef.current.phase !== 'input-open') {
+        return;
+      }
+
+      submissionInProgressRef.current = false;
+      transitionAIInteraction({ phase: 'idle' });
+    },
+    [transitionAIInteraction],
+  );
+
+  const handleChatInputSubmit = useCallback(
+    (prompt: string): void => {
+      if (
+        aiInteractionRef.current.phase !== 'input-open' ||
+        submissionInProgressRef.current
+      ) {
+        return;
+      }
+
+      const normalizedPrompt = prompt.trim();
+
+      if (normalizedPrompt.length === 0) {
+        return;
+      }
+
+      submissionInProgressRef.current = true;
+      requestSequenceRef.current += 1;
+      const requestId = requestSequenceRef.current;
+      const startedAt = performance.now();
+
+      transitionAIInteraction({
+        phase: 'thinking',
+        requestId,
+        startedAt,
+      });
+      speechBubble.clearQueue();
+      speechBubble.hide();
+      speechBubble.show('Thinking...', {
+        icon: '🤔',
+        persistent: true,
+      });
+
+      const request = window.psyduck?.askAI(normalizedPrompt);
+
+      if (request === undefined) {
+        scheduleAIResponse(
+          requestId,
+          'AI is not available in this window.',
+          startedAt,
+        );
+        return;
+      }
+
+      void request.then(
+        (result) => {
+          scheduleAIResponse(
+            requestId,
+            result.ok ? result.response.content : result.message,
+            startedAt,
+          );
+        },
+        () => {
+          scheduleAIResponse(
+            requestId,
+            'AI is not available yet.',
+            startedAt,
+          );
+        },
+      );
+    },
+    [
+      scheduleAIResponse,
+      speechBubble.clearQueue,
+      speechBubble.hide,
+      speechBubble.show,
+      transitionAIInteraction,
+    ],
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+
+      if (responseDelayTimerRef.current !== null) {
+        globalThis.clearTimeout(responseDelayTimerRef.current);
+        responseDelayTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      aiInteraction.phase !== 'showing-response' ||
+      speechBubble.currentMessage?.id !== aiInteraction.messageId
+    ) {
+      return;
+    }
+
+    if (speechBubble.visibility === 'exiting') {
+      transitionAIInteraction({ phase: 'idle' });
+    }
+  }, [
+    aiInteraction,
+    speechBubble.currentMessage,
+    speechBubble.visibility,
+    transitionAIInteraction,
+  ]);
 
   useEffect(() => {
     const lookBehaviorEngine = new BehaviorEngine<BehaviorId>({
@@ -202,14 +428,27 @@ export function App() {
   }, [speechBubble.clearQueue, speechBubble.hide, speechBubble.show]);
 
   return (
-    <main className="app-shell" aria-label="PsyDuck desktop companion">
-      <SpeechBubble
-        message={speechBubble.currentMessage}
-        visibility={speechBubble.visibility}
-        onExitTransitionEnd={speechBubble.notifyExitTransitionEnd}
+    <main
+      className="app-shell"
+      data-ai-state={aiInteraction.phase}
+      aria-label="PsyDuck desktop companion"
+    >
+      {aiInteraction.phase === 'input-open' ? null : (
+        <SpeechBubble
+          message={speechBubble.currentMessage}
+          visibility={speechBubble.visibility}
+          onExitTransitionEnd={speechBubble.notifyExitTransitionEnd}
+        />
+      )}
+      <ChatInputBubble
+        open={aiInteraction.phase === 'input-open'}
+        onCancel={handleChatInputCancel}
+        onSubmit={handleChatInputSubmit}
       />
       <PsyDuck
+        activationEnabled={aiInteraction.phase === 'idle'}
         eyeTrackingEnabled={settings.general.eyeTracking}
+        onActivate={handlePsyDuckActivate}
         onAnimationControllerChange={handleAnimationControllerChange}
       />
     </main>

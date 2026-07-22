@@ -21,6 +21,9 @@
     "start": "electron ."
   },
   "dependencies": {
+    "@google/genai": "^2.13.0",
+    "ollama": "^0.6.3",
+    "openai": "^6.48.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
