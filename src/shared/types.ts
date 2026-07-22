@@ -9,4 +9,5 @@ export interface DesktopBridge {
   readonly platform: string;
   readonly getCursorPosition: () => Promise<ScreenPoint>;
   readonly onCursorPosition: (listener: CursorPositionListener) => () => void;
+  readonly moveWindow: (position: ScreenPoint) => void;
 }

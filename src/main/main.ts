@@ -1,10 +1,49 @@
-import { app, BrowserWindow, ipcMain, Menu, screen } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  screen,
+  type IpcMainEvent,
+} from 'electron';
 
 import { IPC_CHANNELS } from '../shared/events';
 import type { ScreenPoint } from '../shared/types';
 import { createMainWindow } from './window';
 
 const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
+const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
+
+const isWindowPosition = (value: unknown): value is ScreenPoint => {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+
+  const position = value as Record<string, unknown>;
+
+  return (
+    typeof position.x === 'number' &&
+    Number.isFinite(position.x) &&
+    Math.abs(position.x) <= MAX_ABSOLUTE_WINDOW_COORDINATE &&
+    typeof position.y === 'number' &&
+    Number.isFinite(position.y) &&
+    Math.abs(position.y) <= MAX_ABSOLUTE_WINDOW_COORDINATE
+  );
+};
+
+const handleMoveWindow = (event: IpcMainEvent, position: unknown): void => {
+  if (!isWindowPosition(position)) {
+    return;
+  }
+
+  const targetWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (targetWindow === null || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  targetWindow.setPosition(Math.round(position.x), Math.round(position.y), false);
+};
 
 const startCursorBroadcast = (mainWindow: BrowserWindow): void => {
   let lastPosition: ScreenPoint | null = null;
@@ -53,6 +92,7 @@ Menu.setApplicationMenu(null);
 
 void app.whenReady().then(() => {
   ipcMain.handle(IPC_CHANNELS.getCursorPosition, () => screen.getCursorScreenPoint());
+  ipcMain.on(IPC_CHANNELS.moveWindow, handleMoveWindow);
   openMainWindow();
 
   app.on('activate', () => {
@@ -64,6 +104,7 @@ void app.whenReady().then(() => {
 
 app.once('before-quit', () => {
   ipcMain.removeHandler(IPC_CHANNELS.getCursorPosition);
+  ipcMain.removeListener(IPC_CHANNELS.moveWindow, handleMoveWindow);
 });
 
 app.on('window-all-closed', () => {

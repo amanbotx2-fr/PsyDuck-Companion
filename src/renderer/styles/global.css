@@ -31,8 +31,14 @@ body {
   position: relative;
   width: 200px;
   height: 200px;
-  pointer-events: none;
+  cursor: grab;
   user-select: none;
+  touch-action: none;
+  -webkit-user-select: none;
+}
+
+.psyduck-stage[data-dragging='true'] {
+  cursor: grabbing;
 }
 
 .psyduck {

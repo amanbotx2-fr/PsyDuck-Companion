@@ -7,6 +7,7 @@ import idleFrame004 from '../../../character/animations/idle/idle_004.png';
 import idleFrame005 from '../../../character/animations/idle/idle_005.png';
 import idleFrame006 from '../../../character/animations/idle/idle_006.png';
 import { AnimationEngine } from '../../engine/AnimationEngine';
+import { DragController } from '../../engine/DragController';
 import { EyeTracker } from '../../engine/EyeTracker';
 
 const IDLE_FRAMES = [
@@ -40,6 +41,8 @@ export function PsyDuck() {
   });
   const stageRef = useRef<HTMLDivElement>(null);
   const eyesRef = useRef<HTMLDivElement>(null);
+  const eyeTrackerRef = useRef<EyeTracker | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     let disposed = false;
@@ -95,15 +98,54 @@ export function PsyDuck() {
       },
     });
 
+    eyeTrackerRef.current = tracker;
     tracker.start();
 
     return () => {
       tracker.stop();
+
+      if (eyeTrackerRef.current === tracker) {
+        eyeTrackerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const desktopBridge = window.psyduck;
+    const stage = stageRef.current;
+
+    if (desktopBridge === undefined || stage === null) {
+      return;
+    }
+
+    const dragController = new DragController({
+      surface: stage,
+      getWindowPosition: () => ({ x: window.screenX, y: window.screenY }),
+      moveWindow: desktopBridge.moveWindow,
+      onDraggingChange: (isDragging) => {
+        setDragging(isDragging);
+
+        if (isDragging) {
+          eyeTrackerRef.current?.stop();
+        } else {
+          eyeTrackerRef.current?.start();
+        }
+      },
+    });
+
+    dragController.start();
+
+    return () => {
+      dragController.stop();
     };
   }, []);
 
   return (
-    <div ref={stageRef} className="psyduck-stage">
+    <div
+      ref={stageRef}
+      className="psyduck-stage"
+      data-dragging={dragging}
+    >
       <img
         className="psyduck"
         src={currentFrame.path}

@@ -8,6 +8,7 @@ import type {
 
 const CURSOR_POSITION_CHANNEL = 'psyduck:cursor-position';
 const GET_CURSOR_POSITION_CHANNEL = 'psyduck:get-cursor-position';
+const MOVE_WINDOW_CHANNEL = 'psyduck:move-window';
 
 const desktopBridge: DesktopBridge = Object.freeze({
   platform: process.platform,
@@ -23,6 +24,9 @@ const desktopBridge: DesktopBridge = Object.freeze({
     return () => {
       ipcRenderer.removeListener(CURSOR_POSITION_CHANNEL, handleCursorPosition);
     };
+  },
+  moveWindow: (position: ScreenPoint) => {
+    ipcRenderer.send(MOVE_WINDOW_CHANNEL, position);
   },
 });
 
