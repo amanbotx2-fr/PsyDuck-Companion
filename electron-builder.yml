@@ -9,6 +9,10 @@ files:
   - dist/**/*
   - package.json
 
+extraResources:
+  - from: character/master.png
+    to: character/master.png
+
 mac:
   category: public.app-category.developer-tools
   hardenedRuntime: true

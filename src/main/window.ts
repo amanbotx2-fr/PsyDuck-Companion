@@ -7,7 +7,7 @@ const WINDOW_WIDTH = 220;
 const WINDOW_HEIGHT = 220;
 const WINDOW_MARGIN = 24;
 
-export const createMainWindow = (): BrowserWindow => {
+export const createMainWindow = (alwaysOnTop = true): BrowserWindow => {
   const { workArea } = screen.getPrimaryDisplay();
   const x = workArea.x + workArea.width - WINDOW_WIDTH - WINDOW_MARGIN;
   const y = workArea.y + workArea.height - WINDOW_HEIGHT - WINDOW_MARGIN;
@@ -22,7 +22,7 @@ export const createMainWindow = (): BrowserWindow => {
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
-    alwaysOnTop: true,
+    alwaysOnTop,
     skipTaskbar: true,
     resizable: false,
     maximizable: false,
@@ -50,6 +50,9 @@ export const createMainWindow = (): BrowserWindow => {
   });
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event) => {
+    event.preventDefault();
+  });
 
   const rendererDevUrl = process.env[RENDERER_DEV_URL_ENV];
 

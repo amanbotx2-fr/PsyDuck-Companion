@@ -65,6 +65,7 @@ export interface QueuedAnimationOptions extends PlayAnimationOptions {
 }
 
 export interface PsyDuckProps {
+  readonly eyeTrackingEnabled?: boolean;
   readonly onAnimationControllerChange?: (
     controller: PsyDuckAnimationController | null,
   ) => void;
@@ -87,7 +88,10 @@ const animationFramesToPreload = [
   ]),
 ];
 
-export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
+export function PsyDuck({
+  eyeTrackingEnabled = true,
+  onAnimationControllerChange,
+}: PsyDuckProps) {
   const [currentFrame, setCurrentFrame] = useState({
     path: idleAnimation.frames[0],
     index: 0,
@@ -226,7 +230,9 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
   useEffect(() => {
     const desktopBridge = window.psyduck;
 
-    if (desktopBridge === undefined) {
+    if (desktopBridge === undefined || !eyeTrackingEnabled) {
+      eyesRef.current?.style.setProperty('--pupil-x', '0px');
+      eyesRef.current?.style.setProperty('--pupil-y', '0px');
       return;
     }
 
@@ -256,7 +262,10 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
     });
 
     eyeTrackerRef.current = tracker;
-    tracker.start();
+
+    if (!draggingRef.current) {
+      tracker.start();
+    }
 
     return () => {
       tracker.stop();
@@ -264,6 +273,25 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
       if (eyeTrackerRef.current === tracker) {
         eyeTrackerRef.current = null;
       }
+    };
+  }, [eyeTrackingEnabled]);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+
+    if (stage === null) {
+      return;
+    }
+
+    const handleContextMenu = (event: MouseEvent): void => {
+      event.preventDefault();
+      window.psyduck?.showCompanionContextMenu();
+    };
+
+    stage.addEventListener('contextmenu', handleContextMenu);
+
+    return () => {
+      stage.removeEventListener('contextmenu', handleContextMenu);
     };
   }, []);
 

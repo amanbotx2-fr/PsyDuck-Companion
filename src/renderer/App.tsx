@@ -5,11 +5,13 @@ import {
   BehaviorEngine,
   type BehaviorId,
 } from '../engine/BehaviorEngine';
+import { WaterReminder } from '../engine/WaterReminder';
 import {
   PsyDuck,
   type PsyDuckAnimationController,
 } from './components/PsyDuck';
 import { SpeechBubble } from './components/SpeechBubble';
+import { useSettings } from './hooks/useSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
 
 const PLACEHOLDER_BEHAVIORS: readonly BehaviorId[] = [
@@ -22,11 +24,18 @@ const LOOK_BEHAVIOR_PRIORITY = 200;
 const BLINK_BEHAVIOR_PRIORITY = 100;
 const MINIMUM_BLINK_INTERVAL_MS = 4_000;
 const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
+const WATER_REMINDER_DEVELOPMENT_INTERVAL_MS = 60_000;
+const SETTINGS_MANAGED_REMINDER_STORAGE = {
+  getItem: () => null,
+  setItem: () => undefined,
+};
 
 export function App() {
   const animationControllerRef = useRef<PsyDuckAnimationController | null>(
     null,
   );
+  const waterReminderRef = useRef<WaterReminder | null>(null);
+  const { settings } = useSettings();
   const speechBubble = useSpeechBubble();
 
   const handleAnimationControllerChange = useCallback(
@@ -116,6 +125,43 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const waterReminder = new WaterReminder({
+      showMessage: speechBubble.show,
+      storage: SETTINGS_MANAGED_REMINDER_STORAGE,
+      ...(import.meta.env.DEV
+        ? { intervalOverrideMs: WATER_REMINDER_DEVELOPMENT_INTERVAL_MS }
+        : {}),
+    });
+
+    waterReminderRef.current = waterReminder;
+    waterReminder.start();
+
+    return () => {
+      waterReminder.stop();
+
+      if (waterReminderRef.current === waterReminder) {
+        waterReminderRef.current = null;
+      }
+    };
+  }, [speechBubble.show]);
+
+  useEffect(() => {
+    const waterReminder = waterReminderRef.current;
+
+    if (waterReminder === null) {
+      return;
+    }
+
+    waterReminder.setInterval(settings.water.interval);
+
+    if (settings.water.enabled) {
+      waterReminder.enable();
+    } else {
+      waterReminder.disable();
+    }
+  }, [settings.water.enabled, settings.water.interval]);
+
+  useEffect(() => {
     if (!import.meta.env.DEV) {
       return;
     }
@@ -163,6 +209,7 @@ export function App() {
         onExitTransitionEnd={speechBubble.notifyExitTransitionEnd}
       />
       <PsyDuck
+        eyeTrackingEnabled={settings.general.eyeTracking}
         onAnimationControllerChange={handleAnimationControllerChange}
       />
     </main>

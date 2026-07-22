@@ -16,5 +16,14 @@ export default defineConfig({
     outDir: resolve(__dirname, 'dist/renderer'),
     emptyOutDir: false,
     sourcemap: true,
+    rollupOptions: {
+      input: {
+        companion: resolve(__dirname, 'src/renderer/index.html'),
+        preferences: resolve(
+          __dirname,
+          'src/renderer/preferences.html',
+        ),
+      },
+    },
   },
 });
