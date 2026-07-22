@@ -88,24 +88,11 @@ export class OllamaProvider implements AIProvider {
   public async testConnection(): Promise<AIConnectionResult> {
     const models = await this.listModels();
 
-    if (
-      this.model.length > 0 &&
-      !models.some((availableModel) => availableModel.id === this.model)
-    ) {
-      throw createConfigurationError(
-        this.id,
-        'The configured Ollama model is not installed at this endpoint.',
-      );
-    }
-
     return {
       message:
         models.length === 0
           ? 'Ollama connected. No local models are installed.'
-          : `Ollama connected with ${models.length} installed ${
-              models.length === 1 ? 'model' : 'models'
-            }.`,
-      models,
+          : 'Ollama connected successfully.',
     };
   }
 

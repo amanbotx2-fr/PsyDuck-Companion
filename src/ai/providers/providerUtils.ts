@@ -4,8 +4,6 @@ import {
   type AIProviderId,
 } from '../AIProvider';
 
-const MAXIMUM_MODEL_COUNT = 250;
-
 const readNumericStatus = (error: unknown): number | null => {
   if (typeof error !== 'object' || error === null || !('status' in error)) {
     return null;
@@ -126,9 +124,6 @@ export const normalizeModels = (
         : { displayName }),
     });
 
-    if (modelsById.size >= MAXIMUM_MODEL_COUNT) {
-      break;
-    }
   }
 
   return [...modelsById.values()].sort((left, right) =>

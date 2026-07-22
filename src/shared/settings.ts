@@ -14,22 +14,18 @@ export const AI_PROVIDER_OPTIONS = [
   {
     id: 'openai',
     label: 'OpenAI',
-    defaultModel: 'gpt-5.6-sol',
   },
   {
     id: 'gemini',
     label: 'Gemini',
-    defaultModel: 'gemini-3.6-flash',
   },
   {
     id: 'grok',
     label: 'Grok',
-    defaultModel: 'grok-4.5',
   },
   {
     id: 'ollama',
     label: 'Ollama',
-    defaultModel: '',
   },
 ] as const;
 
@@ -57,10 +53,6 @@ export const isValidAiEndpoint = (value: string): boolean => {
     return false;
   }
 };
-
-export const getDefaultAiModel = (provider: AiProvider): string =>
-  AI_PROVIDER_OPTIONS.find((option) => option.id === provider)
-    ?.defaultModel ?? '';
 
 export interface GeneralSettings {
   readonly alwaysOnTop: boolean;

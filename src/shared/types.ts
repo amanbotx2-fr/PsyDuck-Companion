@@ -33,7 +33,6 @@ export type AIConnectionTestResult =
   | {
       readonly ok: true;
       readonly message: string;
-      readonly models: readonly AIModel[];
     }
   | {
       readonly ok: false;

@@ -42,6 +42,9 @@ export const createMainWindow = (alwaysOnTop = true): BrowserWindow => {
   mainWindow.setMenu(null);
 
   if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: false,
+    });
     mainWindow.setWindowButtonVisibility(false);
   }
 

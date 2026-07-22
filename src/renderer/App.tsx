@@ -28,7 +28,6 @@ const LOOK_BEHAVIOR_PRIORITY = 200;
 const BLINK_BEHAVIOR_PRIORITY = 100;
 const MINIMUM_BLINK_INTERVAL_MS = 4_000;
 const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
-const WATER_REMINDER_DEVELOPMENT_INTERVAL_MS = 60_000;
 const MINIMUM_THINKING_DURATION_MS = 350;
 const AI_RESPONSE_DURATION_MS = 5_000;
 const SETTINGS_MANAGED_REMINDER_STORAGE = {
@@ -354,9 +353,7 @@ export function App() {
     const waterReminder = new WaterReminder({
       showMessage: speechBubble.show,
       storage: SETTINGS_MANAGED_REMINDER_STORAGE,
-      ...(import.meta.env.DEV
-        ? { intervalOverrideMs: WATER_REMINDER_DEVELOPMENT_INTERVAL_MS }
-        : {}),
+      debug: import.meta.env.DEV,
     });
 
     waterReminderRef.current = waterReminder;

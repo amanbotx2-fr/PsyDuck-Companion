@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useMemo,
   useState,
   type ChangeEvent,
   type ReactNode,
@@ -8,7 +7,6 @@ import {
 
 import {
   AI_PROVIDER_OPTIONS,
-  getDefaultAiModel,
   isAiProvider,
   isValidAiEndpoint,
   isWaterReminderInterval,
@@ -77,10 +75,18 @@ function SettingsSwitch({
 type ConnectionStatus =
   | { readonly phase: 'idle' }
   | { readonly phase: 'testing'; readonly message: string }
-  | { readonly phase: 'success'; readonly message: string }
+  | { readonly phase: 'connected'; readonly message: string }
+  | { readonly phase: 'error'; readonly message: string };
+
+type ModelLoadingStatus =
+  | { readonly phase: 'idle' }
+  | { readonly phase: 'loading' }
+  | { readonly phase: 'loaded' }
+  | { readonly phase: 'empty' }
   | { readonly phase: 'error'; readonly message: string };
 
 const INITIAL_CONNECTION_STATUS: ConnectionStatus = { phase: 'idle' };
+const INITIAL_MODEL_LOADING_STATUS: ModelLoadingStatus = { phase: 'idle' };
 
 export function PreferencesApp() {
   const { settings, status, errorMessage, update } = useSettings();
@@ -91,9 +97,13 @@ export function PreferencesApp() {
   >([]);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>(INITIAL_CONNECTION_STATUS);
+  const [modelLoadingStatus, setModelLoadingStatus] =
+    useState<ModelLoadingStatus>(INITIAL_MODEL_LOADING_STATUS);
   const settingsAreLoading = status === 'loading';
   const aiActionInProgress =
-    connectionStatus.phase === 'testing' || status === 'saving';
+    connectionStatus.phase === 'testing' ||
+    modelLoadingStatus.phase === 'loading' ||
+    status === 'saving';
   const displayedStatus =
     aiDirty && status !== 'loading' && status !== 'saving' && status !== 'error'
       ? 'dirty'
@@ -118,7 +128,20 @@ export function PreferencesApp() {
       return;
     }
 
+    if (
+      settings.ai.enabled === aiDraft.enabled &&
+      settings.ai.provider === aiDraft.provider &&
+      settings.ai.model === aiDraft.model &&
+      settings.ai.apiKey === aiDraft.apiKey &&
+      settings.ai.endpoint === aiDraft.endpoint
+    ) {
+      return;
+    }
+
     setAiDraft(settings.ai);
+    setAvailableModels([]);
+    setConnectionStatus(INITIAL_CONNECTION_STATUS);
+    setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
   }, [
     aiDirty,
     settings.ai.apiKey,
@@ -126,30 +149,25 @@ export function PreferencesApp() {
     settings.ai.endpoint,
     settings.ai.model,
     settings.ai.provider,
+    aiDraft.apiKey,
+    aiDraft.enabled,
+    aiDraft.endpoint,
+    aiDraft.model,
+    aiDraft.provider,
   ]);
 
-  const modelOptions = useMemo(() => {
-    const options = new Map<string, string>();
-
-    for (const model of availableModels) {
-      options.set(model.id, model.displayName ?? model.id);
-    }
-
-    if (aiDraft.provider !== '') {
-      const defaultModel = getDefaultAiModel(aiDraft.provider);
-
-      if (defaultModel.length > 0) {
-        options.set(defaultModel, defaultModel);
-      }
-    }
-
-    return [...options.entries()].map(([id, label]) => ({ id, label }));
-  }, [aiDraft.provider, availableModels]);
-
-  const updateAiDraft = (patch: Partial<AiSettings>): void => {
+  const updateAiDraft = (
+    patch: Partial<AiSettings>,
+    invalidateConnection = true,
+  ): void => {
     setAiDraft((currentDraft) => ({ ...currentDraft, ...patch }));
     setAiDirty(true);
-    setConnectionStatus(INITIAL_CONNECTION_STATUS);
+
+    if (invalidateConnection) {
+      setAvailableModels([]);
+      setConnectionStatus(INITIAL_CONNECTION_STATUS);
+      setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
+    }
   };
 
   const saveAiSettings = async (): Promise<boolean> => {
@@ -212,33 +230,97 @@ export function PreferencesApp() {
       const result = await desktopBridge.testAIConnection();
 
       if (!result.ok) {
-        setConnectionStatus({ phase: 'error', message: result.message });
-        return;
-      }
-
-      setAvailableModels(result.models);
-
-      if (
-        aiDraft.provider === 'ollama' &&
-        aiDraft.model.trim().length === 0 &&
-        result.models[0] !== undefined
-      ) {
-        updateAiDraft({ model: result.models[0].id });
         setConnectionStatus({
-          phase: 'success',
-          message: `${result.message} Select Save to use ${result.models[0].id}.`,
+          phase: 'error',
+          message: `Connection failed. ${result.message}`,
         });
         return;
       }
 
-      setConnectionStatus({ phase: 'success', message: result.message });
+      setAvailableModels([]);
+      setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
+      setConnectionStatus({
+        phase: 'connected',
+        message: 'Connected',
+      });
     } catch {
       setConnectionStatus({
         phase: 'error',
-        message: 'The connection test could not be completed.',
+        message: 'Connection failed. The test could not be completed.',
       });
     }
   };
+
+  const handleLoadModels = async (): Promise<void> => {
+    if (connectionStatus.phase !== 'connected') {
+      return;
+    }
+
+    const desktopBridge = window.psyduck;
+
+    if (desktopBridge === undefined) {
+      setModelLoadingStatus({
+        phase: 'error',
+        message: 'Model discovery is unavailable in this window.',
+      });
+      return;
+    }
+
+    setModelLoadingStatus({ phase: 'loading' });
+
+    try {
+      const result = await desktopBridge.listAIModels();
+
+      if (!result.ok) {
+        setAvailableModels([]);
+        setModelLoadingStatus({
+          phase: 'error',
+          message: result.message,
+        });
+        return;
+      }
+
+      if (result.models.length === 0) {
+        setAvailableModels([]);
+        setModelLoadingStatus({ phase: 'empty' });
+        updateAiDraft({ model: '' }, false);
+        return;
+      }
+
+      setAvailableModels(result.models);
+      setModelLoadingStatus({ phase: 'loaded' });
+
+      if (
+        !result.models.some((model) => model.id === aiDraft.model)
+      ) {
+        updateAiDraft({ model: result.models[0]?.id ?? '' }, false);
+      }
+    } catch {
+      setAvailableModels([]);
+      setModelLoadingStatus({
+        phase: 'error',
+        message: 'Models could not be loaded.',
+      });
+    }
+  };
+
+  const providerStatusMessage =
+    modelLoadingStatus.phase === 'loading'
+      ? 'Loading models...'
+      : modelLoadingStatus.phase === 'empty'
+        ? 'No models available'
+        : modelLoadingStatus.phase === 'error'
+          ? modelLoadingStatus.message
+          : connectionStatus.phase === 'idle'
+            ? 'Test the connection before loading models.'
+            : connectionStatus.message;
+  const providerStatusTone =
+    connectionStatus.phase === 'error' ||
+    modelLoadingStatus.phase === 'error'
+      ? 'error'
+      : connectionStatus.phase === 'connected'
+        ? 'success'
+        : connectionStatus.phase;
 
   const handleWaterIntervalChange = (
     event: ChangeEvent<HTMLSelectElement>,
@@ -396,7 +478,7 @@ export function PreferencesApp() {
               checked={aiDraft.enabled}
               disabled={settingsAreLoading || aiActionInProgress}
               onChange={(enabled) => {
-                updateAiDraft({ enabled });
+                updateAiDraft({ enabled }, false);
               }}
             />
           }
@@ -424,12 +506,10 @@ export function PreferencesApp() {
                 } else if (isAiProvider(provider)) {
                   updateAiDraft({
                     provider,
-                    model: getDefaultAiModel(provider),
+                    model: '',
                     apiKey: '',
                   });
                 }
-
-                setAvailableModels([]);
               }}
             >
               <option value="">Select a provider</option>
@@ -439,48 +519,6 @@ export function PreferencesApp() {
                 </option>
               ))}
             </select>
-          }
-        />
-
-        <PreferenceRow
-          htmlFor="ai-model"
-          label="Model"
-          description={
-            aiDraft.provider === 'ollama'
-              ? 'Test the endpoint to retrieve installed local models.'
-              : 'Enter a model identifier available to this provider account.'
-          }
-          control={
-            <>
-              <input
-                className="settings-input"
-                id="ai-model"
-                type="text"
-                list="ai-model-options"
-                value={aiDraft.model}
-                placeholder={
-                  aiDraft.provider === 'ollama'
-                    ? 'Select an installed model'
-                    : 'Model identifier'
-                }
-                disabled={
-                  settingsAreLoading ||
-                  aiActionInProgress ||
-                  aiDraft.provider === ''
-                }
-                spellCheck={false}
-                onChange={(event) => {
-                  updateAiDraft({ model: event.currentTarget.value });
-                }}
-              />
-              <datalist id="ai-model-options">
-                {modelOptions.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.label}
-                  </option>
-                ))}
-              </datalist>
-            </>
           }
         />
 
@@ -530,13 +568,11 @@ export function PreferencesApp() {
         <div className="ai-settings-actions">
           <p
             className="connection-status"
-            data-status={connectionStatus.phase}
+            data-status={providerStatusTone}
             aria-live="polite"
-            role={connectionStatus.phase === 'error' ? 'alert' : 'status'}
+            role={providerStatusTone === 'error' ? 'alert' : 'status'}
           >
-            {connectionStatus.phase === 'idle'
-              ? 'Connection tests do not send a chat prompt.'
-              : connectionStatus.message}
+            {providerStatusMessage}
           </p>
           <div className="ai-settings-actions__buttons">
             <button
@@ -556,18 +592,73 @@ export function PreferencesApp() {
                 : 'Test Connection'}
             </button>
             <button
-              className="settings-button settings-button--primary"
+              className="settings-button settings-button--secondary"
               type="button"
               disabled={
-                settingsAreLoading || aiActionInProgress || !aiDirty
+                settingsAreLoading ||
+                aiActionInProgress ||
+                connectionStatus.phase !== 'connected'
               }
               onClick={() => {
-                void saveAiSettings();
+                void handleLoadModels();
               }}
             >
-              Save
+              {modelLoadingStatus.phase === 'loading'
+                ? 'Loading Models…'
+                : 'Load Models'}
             </button>
           </div>
+        </div>
+
+        <PreferenceRow
+          htmlFor="ai-model"
+          label="Model"
+          description="Models are loaded from the selected provider after a successful connection test."
+          control={
+            <select
+              className="settings-select settings-select--model"
+              id="ai-model"
+              value={aiDraft.model}
+              disabled={
+                settingsAreLoading ||
+                aiActionInProgress ||
+                modelLoadingStatus.phase !== 'loaded' ||
+                availableModels.length === 0
+              }
+              onChange={(event) => {
+                updateAiDraft({ model: event.currentTarget.value }, false);
+              }}
+            >
+              {modelLoadingStatus.phase === 'loading' ? (
+                <option value="">Loading models...</option>
+              ) : modelLoadingStatus.phase === 'empty' ? (
+                <option value="">No models available</option>
+              ) : modelLoadingStatus.phase === 'loaded' ? null : (
+                <option value="">Load models first</option>
+              )}
+              {availableModels.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.displayName ?? model.id}
+                </option>
+              ))}
+            </select>
+          }
+        />
+
+        <div className="ai-save-actions">
+          <p>Save applies the selected provider and model immediately.</p>
+          <button
+            className="settings-button settings-button--primary"
+            type="button"
+            disabled={
+              settingsAreLoading || aiActionInProgress || !aiDirty
+            }
+            onClick={() => {
+              void saveAiSettings();
+            }}
+          >
+            Save
+          </button>
         </div>
       </section>
 

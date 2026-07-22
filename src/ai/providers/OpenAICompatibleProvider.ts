@@ -20,6 +20,33 @@ import {
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAXIMUM_RETRIES = 1;
+const OPENAI_NON_TEXT_MODEL_MARKERS = [
+  'audio',
+  'image',
+  'moderation',
+  'realtime',
+  'speech',
+  'transcribe',
+  'tts',
+  'whisper',
+] as const;
+
+const isOpenAITextModel = (modelId: string): boolean => {
+  const normalizedId = modelId.toLowerCase();
+  const baseModelId = normalizedId.startsWith('ft:')
+    ? normalizedId.slice(3)
+    : normalizedId;
+  const belongsToTextFamily =
+    baseModelId.startsWith('gpt-') ||
+    /^o[134](?:-|$)/.test(baseModelId);
+
+  return (
+    belongsToTextFamily &&
+    !OPENAI_NON_TEXT_MODEL_MARKERS.some((marker) =>
+      baseModelId.includes(marker),
+    )
+  );
+};
 
 export class OpenAICompatibleProvider implements AIProvider {
   private client: OpenAI | null = null;
@@ -98,7 +125,17 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     try {
       const page = await client.models.list();
-      return normalizeModels(page.data.map((model) => ({ id: model.id })));
+      const models = page.data.map((model) => ({ id: model.id }));
+
+      // OpenAI's Models API exposes identifiers and ownership, but not endpoint
+      // capability metadata. Filter the account-specific response conservatively
+      // to known text-generation families instead of presenting embeddings,
+      // moderation, image, audio, or realtime models as chat choices.
+      return this.id === 'openai'
+        ? normalizeModels(
+            models.filter((model) => isOpenAITextModel(model.id)),
+          )
+        : normalizeModels(models);
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
     }
@@ -106,15 +143,12 @@ export class OpenAICompatibleProvider implements AIProvider {
 
   public async testConnection(): Promise<AIConnectionResult> {
     const client = this.requireClient();
-    const model = this.requireModel();
 
     try {
-      await client.models.retrieve(model);
-      const models = await this.listModels();
+      await client.models.list();
 
       return {
         message: `${this.displayName} connected successfully.`,
-        models,
       };
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
@@ -133,7 +167,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     return Promise.resolve();
   }
 
-  private requireClient(): OpenAI {
+  protected requireClient(): OpenAI {
     if (this.client === null) {
       throw createConfigurationError(
         this.id,

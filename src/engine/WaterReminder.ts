@@ -39,7 +39,7 @@ export interface WaterReminderOptions {
   readonly storage?: WaterReminderStorage;
   readonly scheduler?: WaterReminderScheduler;
   readonly random?: () => number;
-  readonly intervalOverrideMs?: number;
+  readonly debug?: boolean;
   readonly onError?: (
     error: unknown,
     operation: WaterReminderErrorOperation,
@@ -90,7 +90,6 @@ export class WaterReminder {
   private readonly storage: WaterReminderStorage | undefined;
   private readonly scheduler: WaterReminderScheduler;
   private readonly random: () => number;
-  private readonly intervalOverrideMs: number | undefined;
   private readonly onError:
     | ((
         error: unknown,
@@ -99,28 +98,19 @@ export class WaterReminder {
     | undefined;
   private reminderTimerId: ReturnType<typeof globalThis.setTimeout> | null =
     null;
+  private scheduleGeneration = 0;
   private enabled = true;
   private intervalMinutes = DEFAULT_WATER_REMINDER_INTERVAL_MINUTES;
   private running = false;
+  private readonly debug: boolean;
 
   public constructor(options: WaterReminderOptions) {
-    if (
-      options.intervalOverrideMs !== undefined &&
-      (!Number.isFinite(options.intervalOverrideMs) ||
-        options.intervalOverrideMs <= 0 ||
-        options.intervalOverrideMs > MAXIMUM_TIMER_DELAY_MS)
-    ) {
-      throw new RangeError(
-        'The water reminder interval override must be a valid timer delay.',
-      );
-    }
-
     this.showMessage = options.showMessage;
     this.storage = options.storage ?? getDefaultStorage();
     this.scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
     this.random = options.random ?? Math.random;
-    this.intervalOverrideMs = options.intervalOverrideMs;
     this.onError = options.onError;
+    this.debug = options.debug ?? false;
     this.loadPreferences();
   }
 
@@ -138,29 +128,37 @@ export class WaterReminder {
 
   public start(): void {
     if (this.running) {
+      if (this.reminderTimerId === null) {
+        this.scheduleNextReminder();
+      }
+
+      this.log('start_ignored', { reason: 'already_running' });
       return;
     }
 
     this.running = true;
+    this.log('started');
     this.scheduleNextReminder();
   }
 
   public stop(): void {
-    if (!this.running) {
-      return;
-    }
-
     this.running = false;
     this.cancelScheduledReminder();
+    this.log('stopped');
   }
 
   public enable(): void {
     if (this.enabled) {
+      if (this.running && this.reminderTimerId === null) {
+        this.scheduleNextReminder();
+      }
+
       return;
     }
 
     this.enabled = true;
     this.savePreferences();
+    this.log('enabled');
     this.scheduleNextReminder();
   }
 
@@ -172,6 +170,7 @@ export class WaterReminder {
     this.enabled = false;
     this.cancelScheduledReminder();
     this.savePreferences();
+    this.log('disabled');
   }
 
   public setInterval(minutes: number): void {
@@ -187,15 +186,27 @@ export class WaterReminder {
 
     this.intervalMinutes = minutes;
     this.savePreferences();
+    this.log('interval_changed', { intervalMinutes: minutes });
     this.scheduleNextReminder();
   }
 
-  private readonly handleReminderDeadline = (): void => {
+  private handleReminderDeadline(generation: number): void {
+    if (generation !== this.scheduleGeneration) {
+      this.log('stale_deadline_ignored', { generation });
+      return;
+    }
+
     this.reminderTimerId = null;
 
     if (!this.running || !this.enabled) {
+      this.log('deadline_ignored', {
+        enabled: this.enabled,
+        running: this.running,
+      });
       return;
     }
+
+    this.log('deadline_reached', { generation });
 
     try {
       this.showMessage(this.selectMessage());
@@ -204,7 +215,7 @@ export class WaterReminder {
     } finally {
       this.scheduleNextReminder();
     }
-  };
+  }
 
   private scheduleNextReminder(): void {
     this.cancelScheduledReminder();
@@ -213,22 +224,42 @@ export class WaterReminder {
       return;
     }
 
-    const delayMs =
-      this.intervalOverrideMs ??
-      this.intervalMinutes * MILLISECONDS_PER_MINUTE;
+    const delayMs = this.intervalMinutes * MILLISECONDS_PER_MINUTE;
+    const generation = this.scheduleGeneration;
     this.reminderTimerId = this.scheduler.schedule(
-      this.handleReminderDeadline,
+      () => {
+        this.handleReminderDeadline(generation);
+      },
       delayMs,
     );
+    this.log('scheduled', {
+      delayMs,
+      generation,
+      intervalMinutes: this.intervalMinutes,
+    });
   }
 
   private cancelScheduledReminder(): void {
+    this.scheduleGeneration += 1;
+
     if (this.reminderTimerId === null) {
       return;
     }
 
     this.scheduler.cancel(this.reminderTimerId);
     this.reminderTimerId = null;
+    this.log('cancelled', { generation: this.scheduleGeneration });
+  }
+
+  private log(
+    event: string,
+    details: Readonly<Record<string, boolean | number | string>> = {},
+  ): void {
+    if (!this.debug) {
+      return;
+    }
+
+    console.debug('[water-reminder]', event, details);
   }
 
   private selectMessage(): string {

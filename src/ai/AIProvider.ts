@@ -27,7 +27,6 @@ export interface AIModel {
 
 export interface AIConnectionResult {
   readonly message: string;
-  readonly models: readonly AIModel[];
 }
 
 export interface AIRequest {

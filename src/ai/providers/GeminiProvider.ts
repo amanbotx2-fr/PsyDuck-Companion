@@ -98,25 +98,29 @@ export class GeminiProvider implements AIProvider {
           queryBase: true,
         },
       });
+      const models: AIModel[] = [];
 
-      return normalizeModels(
-        pager.page
-          .filter(
-            (model) =>
-              model.supportedActions === undefined ||
-              model.supportedActions.includes('generateContent'),
-          )
-          .map((model) => {
-            const id = (model.name ?? '').replace(/^models\//, '');
+      for await (const model of pager) {
+        const supportsGenerateContent = model.supportedActions?.some(
+          (action) =>
+            action.replaceAll('_', '').toLowerCase() ===
+            'generatecontent',
+        );
 
-            return {
-              id,
-              ...(model.displayName === undefined
-                ? {}
-                : { displayName: model.displayName }),
-            };
-          }),
-      );
+        if (!supportsGenerateContent) {
+          continue;
+        }
+
+        const id = (model.name ?? '').replace(/^models\//, '');
+        models.push({
+          id,
+          ...(model.displayName === undefined
+            ? {}
+            : { displayName: model.displayName }),
+        });
+      }
+
+      return normalizeModels(models);
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
     }
@@ -124,15 +128,17 @@ export class GeminiProvider implements AIProvider {
 
   public async testConnection(): Promise<AIConnectionResult> {
     const client = this.requireClient();
-    const model = this.requireModel();
 
     try {
-      await client.models.get({ model });
-      const models = await this.listModels();
+      await client.models.list({
+        config: {
+          pageSize: 1,
+          queryBase: true,
+        },
+      });
 
       return {
         message: 'Gemini connected successfully.',
-        models,
       };
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);

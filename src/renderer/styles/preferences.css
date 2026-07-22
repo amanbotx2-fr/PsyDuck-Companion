@@ -298,6 +298,11 @@ select {
   padding: 6px 30px 6px 10px;
 }
 
+.settings-select--model {
+  width: 240px;
+  max-width: 42vw;
+}
+
 .settings-input {
   width: 190px;
   padding: 6px 10px;
@@ -378,6 +383,22 @@ select {
   background: color-mix(in oklch, var(--accent) 86%, var(--surface));
 }
 
+.ai-save-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.ai-save-actions p {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 520;
+  line-height: 1.45;
+}
+
 .preferences-footer {
   padding-top: 2px;
   color: var(--faint);
@@ -408,6 +429,10 @@ select {
     width: 100%;
   }
 
+  .settings-select--model {
+    max-width: none;
+  }
+
   .ai-settings-actions {
     align-items: stretch;
     flex-direction: column;
@@ -419,6 +444,11 @@ select {
 
   .settings-button {
     flex: 1;
+  }
+
+  .ai-save-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
