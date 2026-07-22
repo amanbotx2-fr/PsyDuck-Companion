@@ -1,0 +1,23 @@
+appId: com.psyduck.desktop
+productName: PsyDuck
+asar: true
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - package.json
+
+mac:
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  target:
+    - dmg
+    - zip
+
+dmg:
+  sign: false
+
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}

@@ -1,0 +1,46 @@
+{
+  "name": "psyduck-desktop-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A pixel-art desktop companion for developers.",
+  "author": "Aman",
+  "main": "dist/main/main.js",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "concurrently --kill-others --success first --names renderer,main,electron --prefix-colors cyan,magenta,yellow \"npm:dev:renderer\" \"npm:dev:main\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:main": "tsc -p tsconfig.main.json --watch --preserveWatchOutput",
+    "dev:electron": "wait-on tcp:127.0.0.1:5187 dist/main/main.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5187 nodemon --watch dist/main --ext js --exec \"electron .\"",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "clean": "rimraf dist",
+    "clean:artifacts": "rimraf release",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "build": "npm run clean && npm run typecheck && npm run build:main && npm run build:renderer",
+    "dist": "npm run build && npm run clean:artifacts && electron-builder",
+    "start": "electron ."
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.4",
+    "concurrently": "^9.2.4",
+    "cross-env": "^10.1.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3",
+    "nodemon": "^3.1.14",
+    "rimraf": "^6.1.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "wait-on": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.0.0"
+  }
+}
