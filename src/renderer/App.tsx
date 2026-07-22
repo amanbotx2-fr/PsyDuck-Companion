@@ -6,6 +6,7 @@ import {
   type BehaviorId,
 } from '../engine/BehaviorEngine';
 import { WaterReminder } from '../engine/WaterReminder';
+import { personalityService } from '../personality';
 import {
   PsyDuck,
   type PsyDuckAnimationController,
@@ -104,7 +105,7 @@ export function App() {
       const messageId = speechBubble.show(
         normalizedResponse.length > 0
           ? normalizedResponse
-          : 'The provider returned an empty response.',
+          : personalityService.getErrorMessage(),
         { duration: AI_RESPONSE_DURATION_MS },
       );
 
@@ -197,7 +198,7 @@ export function App() {
       });
       speechBubble.clearQueue();
       speechBubble.hide();
-      speechBubble.show('Thinking...', {
+      speechBubble.show(personalityService.getThinkingMessage(), {
         icon: '🤔',
         persistent: true,
       });
@@ -207,7 +208,7 @@ export function App() {
       if (request === undefined) {
         scheduleAIResponse(
           requestId,
-          'AI is not available in this window.',
+          personalityService.getAIUnavailableMessage(),
           startedAt,
         );
         return;
@@ -224,7 +225,7 @@ export function App() {
         () => {
           scheduleAIResponse(
             requestId,
-            'AI is not available yet.',
+            personalityService.getAIUnavailableMessage(),
             startedAt,
           );
         },

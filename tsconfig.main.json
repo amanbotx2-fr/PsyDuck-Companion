@@ -12,5 +12,10 @@
     "noEmitOnError": true,
     "esModuleInterop": true
   },
-  "include": ["src/ai/**/*.ts", "src/main/**/*.ts", "src/shared/**/*.ts"]
+  "include": [
+    "src/ai/**/*.ts",
+    "src/main/**/*.ts",
+    "src/personality/**/*.ts",
+    "src/shared/**/*.ts"
+  ]
 }

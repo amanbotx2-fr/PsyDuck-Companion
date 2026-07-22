@@ -14,6 +14,7 @@ import {
   type AiSettings,
   type SettingsPatch,
 } from '../shared/settings';
+import { personalityService } from '../personality';
 import { useSettings } from './hooks/useSettings';
 
 interface PreferenceRowProps {
@@ -221,7 +222,7 @@ export function PreferencesApp() {
     if (desktopBridge === undefined) {
       setConnectionStatus({
         phase: 'error',
-        message: 'Connection testing is unavailable in this window.',
+        message: personalityService.getProviderFailedMessage(),
       });
       return;
     }
@@ -232,7 +233,7 @@ export function PreferencesApp() {
       if (!result.ok) {
         setConnectionStatus({
           phase: 'error',
-          message: `Connection failed. ${result.message}`,
+          message: result.message,
         });
         return;
       }
@@ -241,12 +242,12 @@ export function PreferencesApp() {
       setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
       setConnectionStatus({
         phase: 'connected',
-        message: 'Connected',
+        message: personalityService.getProviderConnectedMessage(),
       });
     } catch {
       setConnectionStatus({
         phase: 'error',
-        message: 'Connection failed. The test could not be completed.',
+        message: personalityService.getProviderFailedMessage(),
       });
     }
   };

@@ -17,6 +17,7 @@ import { GeminiProvider } from '../ai/providers/GeminiProvider';
 import { GrokProvider } from '../ai/providers/GrokProvider';
 import { OllamaProvider } from '../ai/providers/OllamaProvider';
 import { OpenAIProvider } from '../ai/providers/OpenAIProvider';
+import { personalityService } from '../personality';
 import { IPC_CHANNELS } from '../shared/events';
 import {
   parseSettingsPatch,
@@ -328,26 +329,16 @@ const handleUpdateSettings = async (
 
 const getAIServiceErrorMessage = (error: unknown): string => {
   if (error instanceof AIServiceError) {
-    const messageByCode: Readonly<
-      Record<AIServiceError['code'], string>
-    > = {
-      disabled: 'AI is disabled in Preferences.',
-      disposed: 'AI is not available right now.',
-      empty_prompt: 'Ask PsyDuck something first.',
-      provider_not_configured:
-        'Complete the selected provider configuration in Preferences.',
-      provider_not_selected: 'Select an AI provider in Preferences.',
-      unsupported_provider: 'The selected AI provider is not supported.',
-    };
-
-    return messageByCode[error.code];
+    return error.code === 'empty_prompt'
+      ? personalityService.getErrorMessage()
+      : personalityService.getAIUnavailableMessage();
   }
 
   if (error instanceof AIProviderError) {
-    return error.message;
+    return personalityService.getProviderFailedMessage();
   }
 
-  return 'AI is not available right now.';
+  return personalityService.getErrorMessage();
 };
 
 const logUnexpectedAIError = (operation: string, error: unknown): void => {

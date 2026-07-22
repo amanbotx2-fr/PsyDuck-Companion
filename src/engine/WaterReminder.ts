@@ -1,13 +1,14 @@
+import {
+  DEFAULT_PERSONALITY_MESSAGES,
+  PersonalityService,
+} from '../personality';
+
 export const DEFAULT_WATER_REMINDER_INTERVAL_MINUTES = 30;
 export const WATER_REMINDER_STORAGE_KEY =
   'psyduck.water-reminder.preferences';
 
-export const WATER_REMINDER_MESSAGES = [
-  '💧 Time to drink some water.',
-  'Stay hydrated!',
-  'Hydration break 💧',
-  'Water first, code later.',
-] as const;
+export const WATER_REMINDER_MESSAGES =
+  DEFAULT_PERSONALITY_MESSAGES.hydration;
 
 const MILLISECONDS_PER_MINUTE = 60_000;
 const MAXIMUM_TIMER_DELAY_MS = 2_147_483_647;
@@ -89,7 +90,7 @@ export class WaterReminder {
   private readonly showMessage: (message: string) => unknown;
   private readonly storage: WaterReminderStorage | undefined;
   private readonly scheduler: WaterReminderScheduler;
-  private readonly random: () => number;
+  private readonly personality: PersonalityService;
   private readonly onError:
     | ((
         error: unknown,
@@ -108,7 +109,9 @@ export class WaterReminder {
     this.showMessage = options.showMessage;
     this.storage = options.storage ?? getDefaultStorage();
     this.scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
-    this.random = options.random ?? Math.random;
+    this.personality = new PersonalityService(
+      options.random === undefined ? {} : { random: options.random },
+    );
     this.onError = options.onError;
     this.debug = options.debug ?? false;
     this.loadPreferences();
@@ -263,26 +266,12 @@ export class WaterReminder {
   }
 
   private selectMessage(): string {
-    let randomValue = 0;
-
     try {
-      const candidate = this.random();
-      randomValue = Number.isFinite(candidate)
-        ? Math.min(Math.max(candidate, 0), 1)
-        : 0;
+      return this.personality.getHydrationMessage();
     } catch (error) {
       this.onError?.(error, 'select_message');
+      return WATER_REMINDER_MESSAGES[0];
     }
-
-    const messageIndex = Math.min(
-      Math.floor(randomValue * WATER_REMINDER_MESSAGES.length),
-      WATER_REMINDER_MESSAGES.length - 1,
-    );
-
-    return (
-      WATER_REMINDER_MESSAGES[messageIndex] ??
-      WATER_REMINDER_MESSAGES[0]
-    );
   }
 
   private loadPreferences(): void {
