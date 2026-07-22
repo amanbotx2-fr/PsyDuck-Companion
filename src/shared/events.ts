@@ -1,2 +1,4 @@
-// TODO: Define shared event contracts when engine behavior is introduced.
-export {};
+export const IPC_CHANNELS = {
+  cursorPosition: 'psyduck:cursor-position',
+  getCursorPosition: 'psyduck:get-cursor-position',
+} as const;
