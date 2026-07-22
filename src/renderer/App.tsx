@@ -11,11 +11,15 @@ import {
 } from './components/PsyDuck';
 
 const PLACEHOLDER_BEHAVIORS: readonly BehaviorId[] = [
-  BEHAVIOR_IDS.blink,
   BEHAVIOR_IDS.think,
   BEHAVIOR_IDS.sleep,
   BEHAVIOR_IDS.wave,
 ];
+
+const LOOK_BEHAVIOR_PRIORITY = 200;
+const BLINK_BEHAVIOR_PRIORITY = 100;
+const MINIMUM_BLINK_INTERVAL_MS = 4_000;
+const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
 
 export function App() {
   const animationControllerRef = useRef<PsyDuckAnimationController | null>(
@@ -30,16 +34,21 @@ export function App() {
   );
 
   useEffect(() => {
-    const behaviorEngine = new BehaviorEngine<BehaviorId>({
+    const lookBehaviorEngine = new BehaviorEngine<BehaviorId>({
       idleBehavior: BEHAVIOR_IDS.idle,
     });
+    const blinkBehaviorEngine = new BehaviorEngine<BehaviorId>({
+      idleBehavior: BEHAVIOR_IDS.idle,
+      minimumIdleIntervalMs: MINIMUM_BLINK_INTERVAL_MS,
+      maximumIdleIntervalMs: MAXIMUM_BLINK_INTERVAL_MS,
+    });
 
-    behaviorEngine.registerBehavior({
+    lookBehaviorEngine.registerBehavior({
       id: BEHAVIOR_IDS.idle,
       execute: () => undefined,
     });
 
-    behaviorEngine.registerBehavior({
+    lookBehaviorEngine.registerBehavior({
       id: BEHAVIOR_IDS.lookLeft,
       canRun: () =>
         animationControllerRef.current?.hasAnimation(
@@ -48,11 +57,11 @@ export function App() {
       execute: () =>
         animationControllerRef.current?.playAnimation(
           BEHAVIOR_IDS.lookLeft,
-          { restart: true },
+          { priority: LOOK_BEHAVIOR_PRIORITY, restart: true },
         ),
     });
 
-    behaviorEngine.registerBehavior({
+    lookBehaviorEngine.registerBehavior({
       id: BEHAVIOR_IDS.lookRight,
       canRun: () =>
         animationControllerRef.current?.hasAnimation(
@@ -61,22 +70,45 @@ export function App() {
       execute: () =>
         animationControllerRef.current?.playAnimation(
           BEHAVIOR_IDS.lookLeft,
-          { flipX: true, restart: true },
+          {
+            flipX: true,
+            priority: LOOK_BEHAVIOR_PRIORITY,
+            restart: true,
+          },
         ),
     });
 
+    blinkBehaviorEngine.registerBehavior({
+      id: BEHAVIOR_IDS.idle,
+      execute: () => undefined,
+    });
+
+    blinkBehaviorEngine.registerBehavior({
+      id: BEHAVIOR_IDS.blink,
+      canRun: () =>
+        animationControllerRef.current?.hasAnimation(BEHAVIOR_IDS.blink) ??
+        false,
+      execute: () =>
+        animationControllerRef.current?.playAnimation(BEHAVIOR_IDS.blink, {
+          priority: BLINK_BEHAVIOR_PRIORITY,
+          restart: true,
+        }),
+    });
+
     for (const behaviorId of PLACEHOLDER_BEHAVIORS) {
-      behaviorEngine.registerBehavior({
+      lookBehaviorEngine.registerBehavior({
         id: behaviorId,
         canRun: () => false,
         execute: () => undefined,
       });
     }
 
-    behaviorEngine.start();
+    lookBehaviorEngine.start();
+    blinkBehaviorEngine.start();
 
     return () => {
-      behaviorEngine.stop();
+      blinkBehaviorEngine.stop();
+      lookBehaviorEngine.stop();
     };
   }, []);
 

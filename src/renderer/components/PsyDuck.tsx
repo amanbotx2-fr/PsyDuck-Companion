@@ -14,12 +14,16 @@ import { EyeTracker } from '../../engine/EyeTracker';
 const ANIMATION_ROOT = '../../../character/animations';
 const IDLE_ANIMATION_NAME = 'idle';
 const LOOK_LEFT_ANIMATION_NAME = 'look_left';
+const BLINK_ANIMATION_NAME = 'blink';
 const IDLE_FPS = 8;
-const CLOSED_EYES_FRAME_INDEX = 3;
 const PUPIL_MAX_X = 4;
 const PUPIL_MAX_Y = 3;
 const EYE_ORIGIN_X = 100;
 const EYE_ORIGIN_Y = 84;
+const ANIMATION_LOOP_OPTIONS: Readonly<Record<string, boolean>> = {
+  [IDLE_ANIMATION_NAME]: true,
+  [BLINK_ANIMATION_NAME]: false,
+};
 
 const animationFrameModules = import.meta.glob(
   '../../../character/animations/*/*.{png,webp}',
@@ -30,12 +34,15 @@ const animationRegistry = new AnimationRegistry();
 animationRegistry.registerFolders(ANIMATION_ROOT, animationFrameModules, {
   fps: IDLE_FPS,
   loop: false,
-  getAnimationOptions: (animationName) =>
-    animationName === IDLE_ANIMATION_NAME ? { loop: true } : undefined,
+  getAnimationOptions: (animationName) => {
+    const loop = ANIMATION_LOOP_OPTIONS[animationName];
+    return loop === undefined ? undefined : { loop };
+  },
 });
 
 const idleAnimation = animationRegistry.require(IDLE_ANIMATION_NAME);
 const lookLeftAnimation = animationRegistry.require(LOOK_LEFT_ANIMATION_NAME);
+const blinkAnimation = animationRegistry.require(BLINK_ANIMATION_NAME);
 
 const preloadFrame = (framePath: string): Promise<void> =>
   new Promise((resolve) => {
@@ -49,8 +56,12 @@ export interface PsyDuckAnimationController {
   readonly hasAnimation: (animationName: string) => boolean;
   readonly playAnimation: (
     animationName: string,
-    options?: PlayAnimationOptions,
+    options?: QueuedAnimationOptions,
   ) => Promise<void>;
+}
+
+export interface QueuedAnimationOptions extends PlayAnimationOptions {
+  readonly priority?: number;
 }
 
 export interface PsyDuckProps {
@@ -59,14 +70,21 @@ export interface PsyDuckProps {
   ) => void;
 }
 
-interface PendingPlayback {
+interface QueuedPlayback {
   readonly animationName: string;
+  readonly options: PlayAnimationOptions;
+  readonly priority: number;
+  readonly sequence: number;
   readonly resolve: () => void;
+  readonly reject: (reason: unknown) => void;
 }
 
 const animationFramesToPreload = [
-  ...idleAnimation.frames,
-  ...lookLeftAnimation.frames,
+  ...new Set([
+    ...idleAnimation.frames,
+    ...lookLeftAnimation.frames,
+    ...blinkAnimation.frames,
+  ]),
 ];
 
 export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
@@ -79,16 +97,15 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const eyesRef = useRef<HTMLDivElement>(null);
   const eyeTrackerRef = useRef<EyeTracker | null>(null);
+  const draggingRef = useRef(false);
+  const resumeQueuedPlaybackRef = useRef<(() => void) | null>(null);
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     let disposed = false;
-    let pendingPlayback: PendingPlayback | null = null;
-
-    const settlePendingPlayback = (): void => {
-      pendingPlayback?.resolve();
-      pendingPlayback = null;
-    };
+    let playbackSequence = 0;
+    let activePlayback: QueuedPlayback | null = null;
+    const playbackQueue: QueuedPlayback[] = [];
 
     const animation = new AnimationEngine({
       registry: animationRegistry,
@@ -107,30 +124,88 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
         });
       },
       onAnimationComplete: (animationName) => {
-        if (pendingPlayback?.animationName === animationName) {
-          settlePendingPlayback();
+        if (activePlayback?.animationName !== animationName) {
+          return;
         }
+
+        const completedPlayback = activePlayback;
+        activePlayback = null;
+        completedPlayback.resolve();
+        requestAnimationFrame(runNextPlayback);
       },
     });
+
+    const runNextPlayback = (): void => {
+      if (
+        disposed ||
+        draggingRef.current ||
+        activePlayback !== null ||
+        playbackQueue.length === 0
+      ) {
+        return;
+      }
+
+      playbackQueue.sort(
+        (left, right) =>
+          right.priority - left.priority || left.sequence - right.sequence,
+      );
+
+      const nextPlayback = playbackQueue.shift();
+
+      if (nextPlayback === undefined) {
+        return;
+      }
+
+      activePlayback = nextPlayback;
+
+      try {
+        const clip = animationRegistry.require(nextPlayback.animationName);
+        animation.play(nextPlayback.animationName, nextPlayback.options);
+
+        if (clip.loop) {
+          activePlayback = null;
+          nextPlayback.resolve();
+          requestAnimationFrame(runNextPlayback);
+        }
+      } catch (error) {
+        activePlayback = null;
+        nextPlayback.reject(error);
+        queueMicrotask(runNextPlayback);
+      }
+    };
+
+    const settlePlaybackRequests = (): void => {
+      activePlayback?.resolve();
+      activePlayback = null;
+
+      for (const playback of playbackQueue.splice(0)) {
+        playback.resolve();
+      }
+    };
 
     const controller: PsyDuckAnimationController = {
       hasAnimation: (animationName) => animationRegistry.has(animationName),
       playAnimation: (animationName, options = {}) => {
-        const clip = animationRegistry.require(animationName);
+        animationRegistry.require(animationName);
 
-        settlePendingPlayback();
+        const { priority = 0, ...playOptions } = options;
 
-        if (clip.loop) {
-          animation.play(animationName, options);
-          return Promise.resolve();
-        }
-
-        return new Promise<void>((resolve) => {
-          pendingPlayback = { animationName, resolve };
-          animation.play(animationName, options);
+        return new Promise<void>((resolve, reject) => {
+          playbackQueue.push({
+            animationName,
+            options: playOptions,
+            priority,
+            sequence: playbackSequence,
+            resolve,
+            reject,
+          });
+          playbackSequence += 1;
+          runNextPlayback();
         });
       },
     };
+
+    resumeQueuedPlaybackRef.current = runNextPlayback;
 
     void Promise.all(animationFramesToPreload.map(preloadFrame)).then(() => {
       if (!disposed) {
@@ -142,8 +217,9 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
     return () => {
       disposed = true;
       onAnimationControllerChange?.(null);
+      resumeQueuedPlaybackRef.current = null;
       animation.stop();
-      settlePendingPlayback();
+      settlePlaybackRequests();
     };
   }, [onAnimationControllerChange]);
 
@@ -204,12 +280,14 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
       getWindowPosition: () => ({ x: window.screenX, y: window.screenY }),
       moveWindow: desktopBridge.moveWindow,
       onDraggingChange: (isDragging) => {
+        draggingRef.current = isDragging;
         setDragging(isDragging);
 
         if (isDragging) {
           eyeTrackerRef.current?.stop();
         } else {
           eyeTrackerRef.current?.start();
+          resumeQueuedPlaybackRef.current?.();
         }
       },
     });
@@ -238,10 +316,7 @@ export function PsyDuck({ onAnimationControllerChange }: PsyDuckProps) {
         ref={eyesRef}
         className="psyduck-eyes"
         aria-hidden="true"
-        hidden={
-          currentFrame.animationName !== IDLE_ANIMATION_NAME ||
-          currentFrame.index === CLOSED_EYES_FRAME_INDEX
-        }
+        hidden={currentFrame.animationName !== IDLE_ANIMATION_NAME}
       >
         <span className="psyduck-eye psyduck-eye--left">
           <span className="psyduck-pupil">
