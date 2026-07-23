@@ -7,6 +7,9 @@ const {
 const {
   ReminderScheduler,
 } = require('../dist/main/ReminderScheduler.js');
+const {
+  calculateNextReminderOccurrence,
+} = require('../dist/shared/reminderRecurrence.js');
 
 const BASE_TIME = Date.parse('2030-01-01T12:00:00.000Z');
 
@@ -65,6 +68,39 @@ class FakeReminderSource {
     for (const listener of this.listeners) {
       listener();
     }
+  }
+}
+
+class RecurringReminderSource extends FakeReminderSource {
+  constructor(reminders, readNow) {
+    super(reminders);
+    this.readNow = readNow;
+  }
+
+  async markCompleted(id) {
+    const index = this.reminders.findIndex((reminder) => reminder.id === id);
+
+    if (index < 0) {
+      throw new Error('Reminder not found.');
+    }
+
+    const reminder = this.reminders[index];
+    const triggeredAt = this.readNow();
+    this.markCompletedCalls.push(id);
+    this.reminders[index] = {
+      ...reminder,
+      completed: false,
+      lastTriggeredAt: new Date(triggeredAt).toISOString(),
+      nextOccurrence: calculateNextReminderOccurrence(
+        reminder.recurrence,
+        reminder.nextOccurrence ?? reminder.scheduledAt,
+        triggeredAt,
+        reminder.scheduledAt,
+      ),
+      updatedAt: new Date(triggeredAt).toISOString(),
+    };
+    this.notify();
+    return { ...this.reminders[index] };
   }
 }
 
@@ -307,5 +343,44 @@ describe('ReminderScheduler', () => {
     assert.equal(events[0].overdue, true);
     assert.equal(restoredTimer.activeCount, 0);
     assert.equal(restoredTimer.maximumActiveCount, 1);
+  });
+
+  test('advances a recurring occurrence with the same reminder ID', async () => {
+    let now = BASE_TIME;
+    const scheduledAt = now + 5_000;
+    const source = new RecurringReminderSource(
+      [
+        createReminder('recurring', scheduledAt, {
+          recurrence: { type: 'daily' },
+          lastTriggeredAt: null,
+          nextOccurrence: new Date(scheduledAt).toISOString(),
+        }),
+      ],
+      () => now,
+    );
+    const timer = new SingleTimerHarness();
+    const scheduler = createScheduler(source, timer, () => now);
+    const events = [];
+    scheduler.subscribe((event) => events.push(event));
+
+    await scheduler.start();
+    now = scheduledAt;
+    await timer.fire();
+    await settleScheduler(scheduler);
+
+    const storedReminder = source.listReminders()[0];
+    assert.equal(events.length, 1);
+    assert.equal(events[0].reminder.id, 'recurring');
+    assert.deepEqual(source.markCompletedCalls, ['recurring']);
+    assert.equal(storedReminder.id, 'recurring');
+    assert.equal(storedReminder.completed, false);
+    assert.equal(
+      storedReminder.nextOccurrence,
+      new Date(scheduledAt + 24 * 60 * 60 * 1_000).toISOString(),
+    );
+    assert.equal(source.listReminders().length, 1);
+    assert.equal(timer.activeCount, 1);
+    assert.equal(timer.delayMs, 60_000);
+    assert.equal(timer.maximumActiveCount, 1);
   });
 });

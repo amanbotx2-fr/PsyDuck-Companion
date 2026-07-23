@@ -520,10 +520,17 @@ body {
 }
 
 .reminder-creation-panel__date-input,
-.reminder-creation-panel__time-input {
+.reminder-creation-panel__time-input,
+.reminder-creation-panel__select {
   color-scheme: light;
   font-size: 12px;
   font-weight: 620;
+}
+
+.reminder-creation-panel__custom-repeat {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
 }
 
 .reminder-creation-panel__feedback {
@@ -701,6 +708,17 @@ body {
   font-weight: 520;
   line-height: 15px;
   white-space: pre-wrap;
+}
+
+.reminder-manager-card__recurrence {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 5px 0 0;
+  color: rgb(91 71 40);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 14px;
 }
 
 .reminder-manager-card__schedule {

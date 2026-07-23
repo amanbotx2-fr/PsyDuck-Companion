@@ -14,7 +14,11 @@ import {
   type ReminderDisplayStatus,
   type ReminderManagerView,
 } from '../../shared/reminderManager';
-import type { Reminder } from '../../shared/reminders';
+import {
+  getReminderSchedule,
+  type Reminder,
+} from '../../shared/reminders';
+import { formatReminderRecurrence } from '../../shared/reminderRecurrence';
 import {
   FloatingCompanionPanel,
   type FloatingCompanionPanelDismissReason,
@@ -87,7 +91,11 @@ function ReminderCard({
   reminder,
 }: ReminderCardProps) {
   const titleId = useId();
-  const scheduledDate = new Date(reminder.scheduledAt);
+  const schedule = getReminderSchedule(reminder);
+  const scheduledDate = new Date(schedule);
+  const recurrenceLabel = formatReminderRecurrence(
+    reminder.recurrence,
+  );
   const status = getReminderDisplayStatus(reminder);
 
   return (
@@ -111,9 +119,16 @@ function ReminderCard({
         </p>
       ) : null}
 
+      {recurrenceLabel === null ? null : (
+        <p className="reminder-manager-card__recurrence">
+          <span aria-hidden="true">↻</span>
+          {recurrenceLabel}
+        </p>
+      )}
+
       <time
         className="reminder-manager-card__schedule"
-        dateTime={reminder.scheduledAt}
+        dateTime={schedule}
       >
         <span>{DATE_FORMATTER.format(scheduledDate)}</span>
         <span aria-hidden="true">·</span>

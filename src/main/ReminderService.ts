@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   cloneReminder,
+  getReminderSchedule,
   MAXIMUM_REMINDER_ID_LENGTH,
   MAXIMUM_REMINDER_MESSAGE_LENGTH,
   MAXIMUM_REMINDER_TITLE_LENGTH,
@@ -9,6 +10,15 @@ import {
   type Reminder,
   type UpdateReminderInput,
 } from '../shared/reminders';
+import {
+  areReminderRecurrencesEqual,
+  calculateNextReminderOccurrence,
+  cloneReminderRecurrence,
+  isRecurringReminder,
+  NO_REMINDER_RECURRENCE,
+  parseReminderRecurrence,
+  type ReminderRecurrence,
+} from '../shared/reminderRecurrence';
 import { SettingsService } from './SettingsService';
 
 export type ReminderValidationField =
@@ -16,6 +26,7 @@ export type ReminderValidationField =
   | 'title'
   | 'message'
   | 'scheduledAt'
+  | 'recurrence'
   | 'reminder';
 
 export class ReminderValidationError extends TypeError {
@@ -42,8 +53,18 @@ export interface ReminderServiceDependencies {
 
 export type ReminderChangeListener = () => void;
 
-const CREATE_INPUT_KEYS = ['title', 'message', 'scheduledAt'] as const;
-const UPDATE_INPUT_KEYS = ['title', 'message', 'scheduledAt'] as const;
+const CREATE_INPUT_KEYS = [
+  'title',
+  'message',
+  'scheduledAt',
+  'recurrence',
+] as const;
+const UPDATE_INPUT_KEYS = [
+  'title',
+  'message',
+  'scheduledAt',
+  'recurrence',
+] as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -55,7 +76,8 @@ const hasOnlyKeys = (
 
 const compareReminders = (left: Reminder, right: Reminder): number => {
   const scheduledDifference =
-    Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt);
+    Date.parse(getReminderSchedule(left)) -
+    Date.parse(getReminderSchedule(right));
 
   if (scheduledDifference !== 0) {
     return scheduledDifference;
@@ -95,6 +117,9 @@ export class ReminderService {
         title: input.title,
         message: input.message,
         scheduledAt: input.scheduledAt,
+        recurrence: cloneReminderRecurrence(input.recurrence),
+        lastTriggeredAt: null,
+        nextOccurrence: input.scheduledAt,
         completed: false,
         createdAt: timestamp.iso,
         updatedAt: timestamp.iso,
@@ -125,10 +150,57 @@ export class ReminderService {
         throw new ReminderNotFoundError();
       }
 
+      const timestamp = this.getCurrentTimestamp();
+      const recurrence =
+        input.recurrence ?? currentReminder.recurrence;
+      const scheduleChanged = input.scheduledAt !== undefined;
+      const recurrenceChanged =
+        input.recurrence !== undefined &&
+        !areReminderRecurrencesEqual(
+          input.recurrence,
+          currentReminder.recurrence,
+        );
+      const scheduledAt =
+        input.scheduledAt ?? currentReminder.scheduledAt;
+      let completed = currentReminder.completed;
+      let lastTriggeredAt = currentReminder.lastTriggeredAt;
+      let nextOccurrence = currentReminder.nextOccurrence;
+
+      if (scheduleChanged) {
+        completed = false;
+        lastTriggeredAt = null;
+        nextOccurrence = scheduledAt;
+      }
+
+      if (recurrenceChanged) {
+        lastTriggeredAt = null;
+
+        if (isRecurringReminder(recurrence)) {
+          completed = false;
+
+          if (
+            nextOccurrence === null ||
+            Date.parse(nextOccurrence) <= timestamp.timestamp
+          ) {
+            nextOccurrence = calculateNextReminderOccurrence(
+              recurrence,
+              scheduledAt,
+              timestamp.timestamp,
+              scheduledAt,
+            );
+          }
+        }
+      }
+
       const updatedReminder: Reminder = {
         ...currentReminder,
         ...input,
-        updatedAt: this.getCurrentTimestamp().iso,
+        scheduledAt,
+        recurrence: cloneReminderRecurrence(recurrence),
+        lastTriggeredAt,
+        nextOccurrence,
+        completed,
+        updatedAt: timestamp.iso,
       };
       const updatedReminders = reminders.map((reminder, reminderIndex) =>
         reminderIndex === index ? updatedReminder : reminder,
@@ -192,11 +264,34 @@ export class ReminderService {
         return cloneReminder(currentReminder);
       }
 
-      const completedReminder: Reminder = {
-        ...currentReminder,
-        completed: true,
-        updatedAt: this.getCurrentTimestamp().iso,
-      };
+      const timestamp = this.getCurrentTimestamp();
+      const completedReminder: Reminder = isRecurringReminder(
+        currentReminder.recurrence,
+      )
+        ? {
+            ...currentReminder,
+            recurrence: cloneReminderRecurrence(
+              currentReminder.recurrence,
+            ),
+            lastTriggeredAt: timestamp.iso,
+            nextOccurrence: calculateNextReminderOccurrence(
+              currentReminder.recurrence,
+              currentReminder.nextOccurrence ??
+                currentReminder.scheduledAt,
+              timestamp.timestamp,
+              currentReminder.scheduledAt,
+            ),
+            completed: false,
+            updatedAt: timestamp.iso,
+          }
+        : {
+            ...currentReminder,
+            recurrence: { type: 'none' },
+            lastTriggeredAt: timestamp.iso,
+            nextOccurrence: null,
+            completed: true,
+            updatedAt: timestamp.iso,
+          };
       const completedReminders = reminders.map(
         (reminder, reminderIndex) =>
           reminderIndex === index ? completedReminder : reminder,
@@ -219,6 +314,7 @@ export class ReminderService {
     readonly title: string;
     readonly message: string;
     readonly scheduledAt: string;
+    readonly recurrence: ReminderRecurrence;
   } {
     if (
       !isRecord(value) ||
@@ -236,6 +332,7 @@ export class ReminderService {
       title: this.parseTitle(value.title),
       message: this.parseMessage(value.message),
       scheduledAt: this.parseScheduledAt(value.scheduledAt),
+      recurrence: this.parseRecurrence(value.recurrence),
     };
   }
 
@@ -260,6 +357,9 @@ export class ReminderService {
         : {}),
       ...(Object.hasOwn(value, 'scheduledAt')
         ? { scheduledAt: this.parseScheduledAt(value.scheduledAt) }
+        : {}),
+      ...(Object.hasOwn(value, 'recurrence')
+        ? { recurrence: this.parseRecurrence(value.recurrence) }
         : {}),
     };
   }
@@ -346,6 +446,23 @@ export class ReminderService {
     }
 
     return scheduledAt.iso;
+  }
+
+  private parseRecurrence(value: unknown): ReminderRecurrence {
+    if (value === undefined) {
+      return { ...NO_REMINDER_RECURRENCE };
+    }
+
+    const recurrence = parseReminderRecurrence(value);
+
+    if (recurrence === null) {
+      throw new ReminderValidationError(
+        'recurrence',
+        'Reminder recurrence is invalid.',
+      );
+    }
+
+    return recurrence;
   }
 
   private generateUniqueId(reminders: readonly Reminder[]): string {

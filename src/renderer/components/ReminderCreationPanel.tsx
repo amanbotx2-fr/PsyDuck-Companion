@@ -9,9 +9,21 @@ import {
 import {
   MAXIMUM_REMINDER_MESSAGE_LENGTH,
   MAXIMUM_REMINDER_TITLE_LENGTH,
+  getReminderSchedule,
   type CreateReminderInput,
   type Reminder,
 } from '../../shared/reminders';
+import {
+  isReminderIntervalUnit,
+  isReminderRecurrenceType,
+  MAXIMUM_REMINDER_INTERVAL_VALUE,
+  MINIMUM_REMINDER_INTERVAL_VALUE,
+  NO_REMINDER_RECURRENCE,
+  parseReminderRecurrence,
+  type ReminderIntervalUnit,
+  type ReminderRecurrence,
+  type ReminderRecurrenceType,
+} from '../../shared/reminderRecurrence';
 import {
   createDefaultReminderLocalSchedule,
   formatReminderLocalSchedule,
@@ -42,6 +54,9 @@ interface ReminderDraft {
   readonly message: string;
   readonly date: string;
   readonly time: string;
+  readonly repeat: ReminderRecurrenceType;
+  readonly intervalValue: string;
+  readonly intervalUnit: ReminderIntervalUnit;
 }
 
 interface ReminderDraftErrors {
@@ -49,16 +64,33 @@ interface ReminderDraftErrors {
   readonly message?: string;
   readonly date?: string;
   readonly time?: string;
+  readonly recurrence?: string;
   readonly form?: string;
 }
+
+const REPEAT_OPTIONS = [
+  { value: 'none', label: 'Never' },
+  { value: 'hourly', label: 'Hourly' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'interval', label: 'Custom' },
+] as const satisfies readonly {
+  readonly value: ReminderRecurrenceType;
+  readonly label: string;
+}[];
 
 const createInitialDraft = (
   initialReminder?: Reminder,
 ): ReminderDraft => {
+  const recurrence =
+    initialReminder?.recurrence ?? NO_REMINDER_RECURRENCE;
   const schedule =
     (initialReminder === undefined
       ? null
-      : formatReminderLocalSchedule(initialReminder.scheduledAt)) ??
+      : formatReminderLocalSchedule(
+          getReminderSchedule(initialReminder),
+        )) ??
     createDefaultReminderLocalSchedule();
 
   return {
@@ -66,6 +98,13 @@ const createInitialDraft = (
     message: initialReminder?.message ?? '',
     date: schedule.date,
     time: schedule.time,
+    repeat: recurrence.type,
+    intervalValue:
+      recurrence.type === 'interval'
+        ? String(recurrence.value)
+        : '1',
+    intervalUnit:
+      recurrence.type === 'interval' ? recurrence.unit : 'hours',
   };
 };
 
@@ -74,8 +113,31 @@ const getFirstError = (errors: ReminderDraftErrors): string | null =>
   errors.message ??
   errors.date ??
   errors.time ??
+  errors.recurrence ??
   errors.form ??
   null;
+
+const createDraftRecurrence = (
+  draft: ReminderDraft,
+): ReminderRecurrence | null => {
+  if (draft.repeat !== 'interval') {
+    return parseReminderRecurrence({ type: draft.repeat });
+  }
+
+  const normalizedValue = draft.intervalValue.trim();
+
+  if (!/^[0-9]+$/.test(normalizedValue)) {
+    return null;
+  }
+
+  const value = Number(normalizedValue);
+
+  return parseReminderRecurrence({
+    type: 'interval',
+    unit: draft.intervalUnit,
+    value,
+  });
+};
 
 const validateDraft = (
   draft: ReminderDraft,
@@ -87,6 +149,7 @@ const validateDraft = (
     message?: string;
     date?: string;
     time?: string;
+    recurrence?: string;
   } = {};
   const title = draft.title.trim();
   const message = draft.message.trim();
@@ -131,6 +194,11 @@ const validateDraft = (
     }
   }
 
+  if (createDraftRecurrence(draft) === null) {
+    errors.recurrence =
+      `Enter a whole number from ${MINIMUM_REMINDER_INTERVAL_VALUE} to ${MAXIMUM_REMINDER_INTERVAL_VALUE}.`;
+  }
+
   return errors;
 };
 
@@ -160,6 +228,10 @@ const getServiceErrors = (error: unknown): ReminderDraftErrors => {
     };
   }
 
+  if (/recurrence is invalid/i.test(message)) {
+    return { recurrence: 'Choose a valid repeat interval.' };
+  }
+
   return { form: 'Could not save the reminder. Try again.' };
 };
 
@@ -176,11 +248,16 @@ export function ReminderCreationPanel({
   const messageInputId = useId();
   const dateInputId = useId();
   const timeInputId = useId();
+  const repeatInputId = useId();
+  const intervalValueInputId = useId();
+  const intervalUnitInputId = useId();
   const feedbackId = useId();
   const titleInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
+  const repeatInputRef = useRef<HTMLSelectElement>(null);
+  const intervalValueInputRef = useRef<HTMLInputElement>(null);
   const submissionInProgressRef = useRef(false);
   const [draft, setDraft] = useState<ReminderDraft>(() =>
     createInitialDraft(initialReminder),
@@ -191,7 +268,9 @@ export function ReminderCreationPanel({
   const initialSchedule =
     initialReminder === undefined
       ? null
-      : formatReminderLocalSchedule(initialReminder.scheduledAt);
+      : formatReminderLocalSchedule(
+          getReminderSchedule(initialReminder),
+        );
   const validateCurrentDraft = (
     nextDraft: ReminderDraft,
   ): ReminderDraftErrors =>
@@ -229,6 +308,12 @@ export function ReminderCreationPanel({
       dateInputRef.current?.focus({ preventScroll: true });
     } else if (validationErrors.time !== undefined) {
       timeInputRef.current?.focus({ preventScroll: true });
+    } else if (validationErrors.recurrence !== undefined) {
+      if (draft.repeat === 'interval') {
+        intervalValueInputRef.current?.focus({ preventScroll: true });
+      } else {
+        repeatInputRef.current?.focus({ preventScroll: true });
+      }
     }
   };
 
@@ -257,11 +342,19 @@ export function ReminderCreationPanel({
       draft.date,
       draft.time,
     );
+    const recurrence = createDraftRecurrence(draft);
 
-    if (scheduledAt === null) {
+    if (scheduledAt === null || recurrence === null) {
       const scheduleErrors = {
-        date: 'Choose a valid date and time.',
-        time: 'Choose a valid date and time.',
+        ...(scheduledAt === null
+          ? {
+              date: 'Choose a valid date and time.',
+              time: 'Choose a valid date and time.',
+            }
+          : {}),
+        ...(recurrence === null
+          ? { recurrence: 'Choose a valid repeat interval.' }
+          : {}),
       };
       setErrors(scheduleErrors);
       focusFirstInvalidField(scheduleErrors);
@@ -276,6 +369,7 @@ export function ReminderCreationPanel({
         title: draft.title.trim(),
         message: draft.message.trim(),
         scheduledAt,
+        recurrence,
       });
     } catch (error) {
       const serviceErrors = getServiceErrors(error);
@@ -328,8 +422,8 @@ export function ReminderCreationPanel({
 
       <p className="visually-hidden" id={descriptionId}>
         {isEditing
-          ? 'Update this reminder’s title, message, date, or time.'
-          : 'Create a reminder with a title, message, date, and time.'}
+          ? 'Update this reminder’s title, message, schedule, or repeat interval.'
+          : 'Create a reminder with a title, message, schedule, and optional repeat interval.'}
       </p>
 
       <div className="reminder-creation-panel__field">
@@ -452,6 +546,124 @@ export function ReminderCreationPanel({
           }}
         />
       </div>
+
+      <div className="reminder-creation-panel__field">
+        <label
+          className="floating-companion-panel__label"
+          htmlFor={repeatInputId}
+        >
+          Repeat
+        </label>
+        <select
+          ref={repeatInputRef}
+          className="floating-companion-panel__input reminder-creation-panel__select"
+          id={repeatInputId}
+          value={draft.repeat}
+          disabled={!open || submitting}
+          tabIndex={open ? 0 : -1}
+          aria-invalid={errors.recurrence !== undefined}
+          aria-describedby={feedbackId}
+          onBlur={() => {
+            setErrors(validateCurrentDraft(draft));
+          }}
+          onChange={(event) => {
+            const repeat = event.currentTarget.value;
+
+            if (!isReminderRecurrenceType(repeat)) {
+              return;
+            }
+
+            updateDraft({
+              ...draft,
+              repeat,
+            });
+          }}
+        >
+          {REPEAT_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {draft.repeat === 'interval' ? (
+        <div
+          className="reminder-creation-panel__custom-repeat"
+          role="group"
+          aria-label="Custom repeat interval"
+        >
+          <div className="reminder-creation-panel__field">
+            <label
+              className="floating-companion-panel__label"
+              htmlFor={intervalValueInputId}
+            >
+              Number
+            </label>
+            <input
+              ref={intervalValueInputRef}
+              className="floating-companion-panel__input"
+              id={intervalValueInputId}
+              type="number"
+              inputMode="numeric"
+              min={MINIMUM_REMINDER_INTERVAL_VALUE}
+              max={MAXIMUM_REMINDER_INTERVAL_VALUE}
+              step={1}
+              value={draft.intervalValue}
+              disabled={!open || submitting}
+              tabIndex={open ? 0 : -1}
+              aria-invalid={errors.recurrence !== undefined}
+              aria-describedby={feedbackId}
+              onBlur={() => {
+                setErrors(validateCurrentDraft(draft));
+              }}
+              onChange={(event) => {
+                updateDraft({
+                  ...draft,
+                  intervalValue: event.currentTarget.value,
+                });
+              }}
+            />
+          </div>
+
+          <div className="reminder-creation-panel__field">
+            <label
+              className="floating-companion-panel__label"
+              htmlFor={intervalUnitInputId}
+            >
+              Unit
+            </label>
+            <select
+              className="floating-companion-panel__input reminder-creation-panel__select"
+              id={intervalUnitInputId}
+              value={draft.intervalUnit}
+              disabled={!open || submitting}
+              tabIndex={open ? 0 : -1}
+              aria-invalid={errors.recurrence !== undefined}
+              aria-describedby={feedbackId}
+              onBlur={() => {
+                setErrors(validateCurrentDraft(draft));
+              }}
+              onChange={(event) => {
+                const unit = event.currentTarget.value;
+
+                if (!isReminderIntervalUnit(unit)) {
+                  return;
+                }
+
+                updateDraft({
+                  ...draft,
+                  intervalUnit: unit,
+                });
+              }}
+            >
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </div>
+        </div>
+      ) : null}
 
       <p
         className="floating-companion-panel__feedback reminder-creation-panel__feedback"

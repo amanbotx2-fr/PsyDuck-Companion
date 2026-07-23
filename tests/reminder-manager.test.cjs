@@ -89,6 +89,26 @@ describe('reminder manager grouping', () => {
       'completed',
     );
   });
+
+  test('uses the next recurring occurrence for sorting and status', () => {
+    const now = Date.parse('2030-01-10T12:00:00.000Z');
+    const recurring = createReminder('recurring', {
+      scheduledAt: '2030-01-01T09:00:00.000Z',
+      recurrence: { type: 'daily' },
+      lastTriggeredAt: '2030-01-10T09:00:00.000Z',
+      nextOccurrence: '2030-01-11T09:00:00.000Z',
+    });
+    const oneTime = createReminder('one-time', {
+      scheduledAt: '2030-01-10T18:00:00.000Z',
+    });
+    const groups = groupRemindersForManager([recurring, oneTime]);
+
+    assert.deepEqual(
+      groups.upcoming.map(({ id }) => id),
+      ['one-time', 'recurring'],
+    );
+    assert.equal(getReminderDisplayStatus(recurring, now), 'upcoming');
+  });
 });
 
 describe('reminder manager edits', () => {
@@ -126,6 +146,45 @@ describe('reminder manager edits', () => {
         title: 'Publish notes',
         message: 'Share with the team.',
         scheduledAt: '2030-01-01T12:35:00.000Z',
+      },
+    );
+  });
+
+  test('includes recurrence only when the repeat configuration changes', () => {
+    const reminder = createReminder('repeat-edit', {
+      recurrence: { type: 'daily' },
+      lastTriggeredAt: null,
+      nextOccurrence: '2030-01-01T12:30:00.000Z',
+      scheduledAt: '2030-01-01T12:30:00.000Z',
+    });
+    const baseInput = {
+      title: reminder.title,
+      message: reminder.message,
+      scheduledAt: reminder.nextOccurrence,
+    };
+
+    assert.equal(
+      createReminderUpdateInput(reminder, {
+        ...baseInput,
+        recurrence: { type: 'daily' },
+      }),
+      null,
+    );
+    assert.deepEqual(
+      createReminderUpdateInput(reminder, {
+        ...baseInput,
+        recurrence: {
+          type: 'interval',
+          unit: 'hours',
+          value: 3,
+        },
+      }),
+      {
+        recurrence: {
+          type: 'interval',
+          unit: 'hours',
+          value: 3,
+        },
       },
     );
   });

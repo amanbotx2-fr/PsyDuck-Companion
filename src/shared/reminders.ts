@@ -1,3 +1,16 @@
+import {
+  cloneReminderRecurrence,
+  NO_REMINDER_RECURRENCE,
+  parseReminderRecurrence,
+  type ReminderRecurrence,
+} from './reminderRecurrence';
+
+export type {
+  ReminderIntervalUnit,
+  ReminderRecurrence,
+  ReminderRecurrenceType,
+} from './reminderRecurrence';
+
 export const MAXIMUM_REMINDER_TITLE_LENGTH = 60;
 export const MAXIMUM_REMINDER_MESSAGE_LENGTH = 250;
 export const MAXIMUM_REMINDER_ID_LENGTH = 128;
@@ -8,6 +21,9 @@ export interface Reminder {
   readonly title: string;
   readonly message: string;
   readonly scheduledAt: string;
+  readonly recurrence: ReminderRecurrence;
+  readonly lastTriggeredAt: string | null;
+  readonly nextOccurrence: string | null;
   readonly completed: boolean;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -17,6 +33,7 @@ export interface CreateReminderInput {
   readonly title: string;
   readonly message?: string;
   readonly scheduledAt: string;
+  readonly recurrence?: ReminderRecurrence;
 }
 
 export interface ReminderFiredNotification {
@@ -29,6 +46,7 @@ export interface UpdateReminderInput {
   readonly title?: string;
   readonly message?: string;
   readonly scheduledAt?: string;
+  readonly recurrence?: ReminderRecurrence;
 }
 
 export interface ParsedIsoDateTime {
@@ -41,6 +59,9 @@ const REMINDER_KEYS = [
   'title',
   'message',
   'scheduledAt',
+  'recurrence',
+  'lastTriggeredAt',
+  'nextOccurrence',
   'completed',
   'createdAt',
   'updatedAt',
@@ -144,7 +165,11 @@ export const parseIsoDateTime = (
 
 export const cloneReminder = (reminder: Reminder): Reminder => ({
   ...reminder,
+  recurrence: cloneReminderRecurrence(reminder.recurrence),
 });
+
+export const getReminderSchedule = (reminder: Reminder): string =>
+  reminder.nextOccurrence ?? reminder.scheduledAt;
 
 export const createSnoozedReminderInput = (
   reminder: Reminder,
@@ -160,6 +185,7 @@ export const createSnoozedReminderInput = (
     scheduledAt: new Date(
       nowTimestamp + REMINDER_SNOOZE_DURATION_MS,
     ).toISOString(),
+    recurrence: { type: 'none' },
   };
 };
 
@@ -167,7 +193,15 @@ export const parseStoredReminder = (value: unknown): Reminder | null => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, REMINDER_KEYS) ||
-    REMINDER_KEYS.some((key) => !Object.hasOwn(value, key)) ||
+    [
+      'id',
+      'title',
+      'message',
+      'scheduledAt',
+      'completed',
+      'createdAt',
+      'updatedAt',
+    ].some((key) => !Object.hasOwn(value, key)) ||
     typeof value.id !== 'string' ||
     value.id.length === 0 ||
     value.id.length > MAXIMUM_REMINDER_ID_LENGTH ||
@@ -187,12 +221,39 @@ export const parseStoredReminder = (value: unknown): Reminder | null => {
   const scheduledAt = parseIsoDateTime(value.scheduledAt);
   const createdAt = parseIsoDateTime(value.createdAt);
   const updatedAt = parseIsoDateTime(value.updatedAt);
+  const recurrence =
+    value.recurrence === undefined
+      ? NO_REMINDER_RECURRENCE
+      : parseReminderRecurrence(value.recurrence);
+  const lastTriggeredAt =
+    value.lastTriggeredAt === undefined ||
+    value.lastTriggeredAt === null
+      ? null
+      : parseIsoDateTime(value.lastTriggeredAt);
+  const nextOccurrence =
+    value.nextOccurrence === undefined
+      ? value.completed
+        ? null
+        : scheduledAt
+      : value.nextOccurrence === null
+        ? null
+        : parseIsoDateTime(value.nextOccurrence);
 
   if (
     scheduledAt === null ||
     createdAt === null ||
     updatedAt === null ||
-    updatedAt.timestamp < createdAt.timestamp
+    recurrence === null ||
+    (value.lastTriggeredAt !== undefined &&
+      value.lastTriggeredAt !== null &&
+      lastTriggeredAt === null) ||
+    (value.nextOccurrence !== undefined &&
+      value.nextOccurrence !== null &&
+      nextOccurrence === null) ||
+    updatedAt.timestamp < createdAt.timestamp ||
+    (!value.completed && nextOccurrence === null) ||
+    (value.completed &&
+      (recurrence.type !== 'none' || nextOccurrence !== null))
   ) {
     return null;
   }
@@ -202,6 +263,11 @@ export const parseStoredReminder = (value: unknown): Reminder | null => {
     title: value.title,
     message: value.message,
     scheduledAt: scheduledAt.iso,
+    recurrence: cloneReminderRecurrence(recurrence),
+    lastTriggeredAt:
+      lastTriggeredAt === null ? null : lastTriggeredAt.iso,
+    nextOccurrence:
+      nextOccurrence === null ? null : nextOccurrence.iso,
     completed: value.completed,
     createdAt: createdAt.iso,
     updatedAt: updatedAt.iso,

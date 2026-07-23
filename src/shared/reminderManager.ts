@@ -1,9 +1,15 @@
 import { areReminderLocalSchedulesEqual } from './reminderDraft';
-import type {
-  CreateReminderInput,
-  Reminder,
-  UpdateReminderInput,
+import {
+  getReminderSchedule,
+  type CreateReminderInput,
+  type Reminder,
+  type UpdateReminderInput,
 } from './reminders';
+import {
+  areReminderRecurrencesEqual,
+  NO_REMINDER_RECURRENCE,
+  type ReminderRecurrence,
+} from './reminderRecurrence';
 
 export const REMINDER_MANAGER_VIEWS = [
   'upcoming',
@@ -32,7 +38,8 @@ const compareUpcoming = (
   left: Reminder,
   right: Reminder,
 ): number =>
-  Date.parse(left.scheduledAt) - Date.parse(right.scheduledAt) ||
+  Date.parse(getReminderSchedule(left)) -
+    Date.parse(getReminderSchedule(right)) ||
   compareIds(left, right);
 
 const compareCompleted = (
@@ -41,7 +48,8 @@ const compareCompleted = (
 ): number =>
   // markCompleted records the completion timestamp in updatedAt.
   Date.parse(right.updatedAt) - Date.parse(left.updatedAt) ||
-  Date.parse(right.scheduledAt) - Date.parse(left.scheduledAt) ||
+  Date.parse(getReminderSchedule(right)) -
+    Date.parse(getReminderSchedule(left)) ||
   compareIds(left, right);
 
 export const groupRemindersForManager = (
@@ -69,7 +77,7 @@ export const getReminderDisplayStatus = (
     return 'completed';
   }
 
-  return Date.parse(reminder.scheduledAt) < nowTimestamp
+  return Date.parse(getReminderSchedule(reminder)) < nowTimestamp
     ? 'overdue'
     : 'upcoming';
 };
@@ -82,6 +90,7 @@ export const createReminderUpdateInput = (
     title?: string;
     message?: string;
     scheduledAt?: string;
+    recurrence?: ReminderRecurrence;
   } = {};
   const title = input.title.trim();
   const message = input.message?.trim() ?? '';
@@ -97,10 +106,20 @@ export const createReminderUpdateInput = (
   if (
     !areReminderLocalSchedulesEqual(
       input.scheduledAt,
-      reminder.scheduledAt,
+      getReminderSchedule(reminder),
     )
   ) {
     patch.scheduledAt = input.scheduledAt;
+  }
+
+  if (
+    input.recurrence !== undefined &&
+    !areReminderRecurrencesEqual(
+      input.recurrence,
+      reminder.recurrence ?? NO_REMINDER_RECURRENCE,
+    )
+  ) {
+    patch.recurrence = input.recurrence;
   }
 
   return Object.keys(patch).length === 0 ? null : patch;

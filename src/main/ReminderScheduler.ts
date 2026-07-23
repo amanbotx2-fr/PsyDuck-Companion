@@ -249,7 +249,13 @@ export class ReminderScheduler {
         continue;
       }
 
-      const timestamp = Date.parse(reminder.scheduledAt);
+      const occurrence = reminder.nextOccurrence;
+
+      if (occurrence === null) {
+        continue;
+      }
+
+      const timestamp = Date.parse(occurrence);
 
       if (!Number.isFinite(timestamp)) {
         continue;
