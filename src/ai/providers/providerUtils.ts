@@ -3,6 +3,10 @@ import {
   type AIModel,
   type AIProviderId,
 } from '../AIProvider';
+import {
+  limitProviderErrorMessage,
+  normalizeAIModels,
+} from '../AIAbuseLimits';
 
 const readNumericStatus = (error: unknown): number | null => {
   if (typeof error !== 'object' || error === null || !('status' in error)) {
@@ -18,7 +22,9 @@ const isConnectionFailure = (error: unknown): boolean => {
     return false;
   }
 
-  const details = `${error.name} ${error.message}`.toLowerCase();
+  const details = limitProviderErrorMessage(
+    `${error.name} ${error.message}`,
+  ).toLowerCase();
 
   return [
     'abort',
@@ -105,28 +111,5 @@ export const createStreamingUnsupportedError = (
   );
 
 export const normalizeModels = (
-  models: readonly AIModel[],
-): readonly AIModel[] => {
-  const modelsById = new Map<string, AIModel>();
-
-  for (const model of models) {
-    const id = model.id.trim();
-
-    if (id.length === 0 || modelsById.has(id)) {
-      continue;
-    }
-
-    const displayName = model.displayName?.trim();
-    modelsById.set(id, {
-      id,
-      ...(displayName === undefined || displayName.length === 0
-        ? {}
-        : { displayName }),
-    });
-
-  }
-
-  return [...modelsById.values()].sort((left, right) =>
-    left.id.localeCompare(right.id),
-  );
-};
+  models: Iterable<AIModel>,
+): readonly AIModel[] => normalizeAIModels(models);

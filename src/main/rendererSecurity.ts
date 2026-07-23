@@ -1,5 +1,6 @@
 import { app, type BrowserWindow } from 'electron';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { RENDERER_DEV_URL_ENV } from '../shared/constants';
 
@@ -16,6 +17,7 @@ const RENDERER_PAGES = {
     developmentPath: '/preferences.html',
   },
 } as const;
+const expectedRendererUrls = new WeakMap<BrowserWindow, string>();
 
 export type RendererPage = keyof typeof RENDERER_PAGES;
 
@@ -146,6 +148,15 @@ export const hardenRendererNavigation = (
   });
 };
 
+const getRendererLocationUrl = (location: RendererLocation): string =>
+  location.type === 'url'
+    ? location.target
+    : pathToFileURL(location.target).toString();
+
+export const getExpectedRendererUrl = (
+  browserWindow: BrowserWindow,
+): string | null => expectedRendererUrls.get(browserWindow) ?? null;
+
 export const loadRenderer = (
   browserWindow: BrowserWindow,
   page: RendererPage,
@@ -157,6 +168,11 @@ export const loadRenderer = (
     ? undefined
     : process.env[RENDERER_DEV_URL_ENV];
   const location = resolveRendererLocation(page, isPackaged, developmentUrl);
+  // Pin IPC authorization to the exact page selected for this window load.
+  expectedRendererUrls.set(
+    browserWindow,
+    getRendererLocationUrl(location),
+  );
 
   if (location.rejectedDevelopmentUrlReason !== undefined) {
     console.warn(

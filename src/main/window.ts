@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 
 import { APP_NAME } from '../shared/constants';
+import { electronPermissionPolicy } from './permissionPolicy';
 import {
   hardenRendererNavigation,
   loadRenderer,
@@ -43,6 +44,7 @@ export const createMainWindow = (alwaysOnTop = true): BrowserWindow => {
     },
   });
 
+  electronPermissionPolicy.registerWindow(mainWindow, 'companion');
   mainWindow.setMenu(null);
 
   if (process.platform === 'darwin') {

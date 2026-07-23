@@ -1,4 +1,5 @@
 import type { AIContext } from './AIContext';
+import { limitProviderErrorMessage } from './AIAbuseLimits';
 import {
   AI_PROVIDER_OPTIONS,
   isAiProvider,
@@ -34,6 +35,10 @@ export interface AIRequest {
   readonly context?: AIContext;
 }
 
+export interface AIOperationOptions {
+  readonly signal?: AbortSignal;
+}
+
 export type AIResponseFinishReason =
   | 'stop'
   | 'length'
@@ -62,9 +67,16 @@ export interface AIProvider {
   readonly displayName: string;
   initialize(configuration: AIProviderConfiguration): Promise<void>;
   isConfigured(): boolean;
-  sendMessage(request: AIRequest): Promise<AIResponse>;
-  listModels(): Promise<readonly AIModel[]>;
-  testConnection(): Promise<AIConnectionResult>;
+  sendMessage(
+    request: AIRequest,
+    options?: AIOperationOptions,
+  ): Promise<AIResponse>;
+  listModels(
+    options?: AIOperationOptions,
+  ): Promise<readonly AIModel[]>;
+  testConnection(
+    options?: AIOperationOptions,
+  ): Promise<AIConnectionResult>;
   streamMessage(request: AIRequest): AsyncIterable<AIStreamChunk>;
   dispose(): Promise<void>;
 }
@@ -85,7 +97,7 @@ export class AIProviderError extends Error {
     message: string,
     options?: ErrorOptions,
   ) {
-    super(message, options);
+    super(limitProviderErrorMessage(message), options);
     this.name = 'AIProviderError';
     this.providerId = providerId;
     this.code = code;

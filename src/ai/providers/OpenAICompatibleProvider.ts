@@ -1,6 +1,11 @@
 import OpenAI from 'openai';
 
 import {
+  MAXIMUM_AI_MODEL_CANDIDATES,
+  MAXIMUM_AI_OUTPUT_TOKENS,
+} from '../AIAbuseLimits';
+import {
+  type AIOperationOptions,
   type AIConnectionResult,
   type AIModel,
   type AIProvider,
@@ -82,15 +87,26 @@ export class OpenAICompatibleProvider implements AIProvider {
     return this.client !== null && this.model.length > 0;
   }
 
-  public async sendMessage(request: AIRequest): Promise<AIResponse> {
+  public async sendMessage(
+    request: AIRequest,
+    options: AIOperationOptions = {},
+  ): Promise<AIResponse> {
     const client = this.requireClient();
     const model = this.requireModel();
+    const requestOptions =
+      options.signal === undefined
+        ? undefined
+        : { signal: options.signal };
 
     try {
-      const response = await client.responses.create({
-        model,
-        input: request.prompt,
-      });
+      const response = await client.responses.create(
+        {
+          model,
+          input: request.prompt,
+          max_output_tokens: MAXIMUM_AI_OUTPUT_TOKENS,
+        },
+        requestOptions,
+      );
       const content = response.output_text.trim();
 
       if (content.length === 0) {
@@ -120,32 +136,53 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
   }
 
-  public async listModels(): Promise<readonly AIModel[]> {
+  public async listModels(
+    options: AIOperationOptions = {},
+  ): Promise<readonly AIModel[]> {
     const client = this.requireClient();
 
     try {
-      const page = await client.models.list();
-      const models = page.data.map((model) => ({ id: model.id }));
+      const page = await client.models.list(
+        options.signal === undefined
+          ? undefined
+          : { signal: options.signal },
+      );
+      const models: AIModel[] = [];
+      let inspectedModels = 0;
+
+      for (const model of page.data) {
+        inspectedModels += 1;
+
+        if (inspectedModels > MAXIMUM_AI_MODEL_CANDIDATES) {
+          break;
+        }
+
+        if (this.id !== 'openai' || isOpenAITextModel(model.id)) {
+          models.push({ id: model.id });
+        }
+      }
 
       // OpenAI's Models API exposes identifiers and ownership, but not endpoint
       // capability metadata. Filter the account-specific response conservatively
       // to known text-generation families instead of presenting embeddings,
       // moderation, image, audio, or realtime models as chat choices.
-      return this.id === 'openai'
-        ? normalizeModels(
-            models.filter((model) => isOpenAITextModel(model.id)),
-          )
-        : normalizeModels(models);
+      return normalizeModels(models);
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
     }
   }
 
-  public async testConnection(): Promise<AIConnectionResult> {
+  public async testConnection(
+    options: AIOperationOptions = {},
+  ): Promise<AIConnectionResult> {
     const client = this.requireClient();
 
     try {
-      await client.models.list();
+      await client.models.list(
+        options.signal === undefined
+          ? undefined
+          : { signal: options.signal },
+      );
 
       return {
         message: `${this.displayName} connected successfully.`,

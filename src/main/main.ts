@@ -8,7 +8,6 @@ import {
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   type Tray,
-  type WebContents,
 } from 'electron';
 import { join } from 'node:path';
 
@@ -18,6 +17,10 @@ import { GeminiProvider } from '../ai/providers/GeminiProvider';
 import { GrokProvider } from '../ai/providers/GrokProvider';
 import { OllamaProvider } from '../ai/providers/OllamaProvider';
 import { OpenAIProvider } from '../ai/providers/OpenAIProvider';
+import {
+  LoopbackOllamaEndpointPolicy,
+  OllamaEndpointPolicyError,
+} from '../ai/providers/ollama/OllamaEndpointPolicy';
 import { personalityService } from '../personality';
 import { IPC_CHANNELS } from '../shared/events';
 import {
@@ -47,7 +50,16 @@ import {
   CredentialManager,
   CredentialStorageError,
 } from './CredentialManager';
+import {
+  AIRequestManager,
+  AIRequestPolicyError,
+} from './AIRequestManager';
+import {
+  IpcAuthorizer,
+  type RendererRole,
+} from './ipcAuthorization';
 import { createPreferencesWindow } from './preferencesWindow';
+import { getExpectedRendererUrl } from './rendererSecurity';
 import { SettingsService } from './SettingsService';
 import { createSystemTray } from './tray';
 import { createMainWindow } from './window';
@@ -61,6 +73,8 @@ const API_KEY_PROVIDERS: ReadonlySet<AiProviderSelection> = new Set([
   'gemini',
   'grok',
 ]);
+const ollamaEndpointPolicy = new LoopbackOllamaEndpointPolicy();
+const aiRequestManager = new AIRequestManager();
 
 let mainWindow: BrowserWindow | null = null;
 let preferencesWindow: BrowserWindow | null = null;
@@ -68,6 +82,21 @@ let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let aiService: AIService | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
+
+const ipcAuthorizer = new IpcAuthorizer({
+  getTarget: (role) => {
+    const browserWindow =
+      role === 'companion' ? mainWindow : preferencesWindow;
+
+    return {
+      browserWindow,
+      expectedUrl:
+        browserWindow === null
+          ? null
+          : getExpectedRendererUrl(browserWindow),
+    };
+  },
+});
 
 const getSettingsService = (): SettingsService => {
   if (settingsService === null) {
@@ -130,14 +159,8 @@ const isWindowPosition = (value: unknown): value is ScreenPoint => {
   );
 };
 
-const isCompanionRenderer = (sender: WebContents): boolean =>
-  BrowserWindow.fromWebContents(sender) === mainWindow;
-
-const isPreferencesRenderer = (sender: WebContents): boolean =>
-  BrowserWindow.fromWebContents(sender) === preferencesWindow;
-
 const handleMoveWindow = (event: IpcMainEvent, position: unknown): void => {
-  if (!isCompanionRenderer(event.sender) || !isWindowPosition(position)) {
+  if (!isWindowPosition(position)) {
     return;
   }
 
@@ -200,6 +223,23 @@ const startCursorBroadcast = (targetWindow: BrowserWindow): void => {
   });
 };
 
+const bindAIRequestLifecycle = (
+  targetWindow: BrowserWindow,
+  rendererRole: RendererRole,
+): void => {
+  targetWindow.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      aiRequestManager.cancelRole(rendererRole, 'renderer_reloaded');
+    }
+  });
+  targetWindow.webContents.once('render-process-gone', () => {
+    aiRequestManager.cancelRole(rendererRole, 'renderer_crashed');
+  });
+  targetWindow.once('closed', () => {
+    aiRequestManager.cancelRole(rendererRole, 'window_closed');
+  });
+};
+
 const openMainWindow = (): BrowserWindow => {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     return mainWindow;
@@ -209,6 +249,7 @@ const openMainWindow = (): BrowserWindow => {
     getSettingsService().get().general.alwaysOnTop;
   const nextMainWindow = createMainWindow(alwaysOnTop);
   mainWindow = nextMainWindow;
+  bindAIRequestLifecycle(nextMainWindow, 'companion');
   startCursorBroadcast(nextMainWindow);
 
   nextMainWindow.once('closed', () => {
@@ -238,6 +279,7 @@ const openPreferences = (): void => {
 
   const nextPreferencesWindow = createPreferencesWindow();
   preferencesWindow = nextPreferencesWindow;
+  bindAIRequestLifecycle(nextPreferencesWindow, 'preferences');
 
   nextPreferencesWindow.once('closed', () => {
     if (preferencesWindow === nextPreferencesWindow) {
@@ -247,6 +289,7 @@ const openPreferences = (): void => {
 };
 
 const restartApplication = (): void => {
+  aiRequestManager.cancelAll('application_quit');
   app.relaunch();
   app.exit(0);
 };
@@ -269,12 +312,10 @@ const getMenuActions = (): ApplicationMenuActions => ({
   updateSettings,
 });
 
-const handleShowCompanionContextMenu = (event: IpcMainEvent): void => {
-  if (
-    !isCompanionRenderer(event.sender) ||
-    mainWindow === null ||
-    mainWindow.isDestroyed()
-  ) {
+const handleShowCompanionContextMenu = (
+  _event: IpcMainEvent,
+): void => {
+  if (mainWindow === null || mainWindow.isDestroyed()) {
     return;
   }
 
@@ -315,43 +356,27 @@ const applyRuntimeSettings = (settings: AppSettings): void => {
 };
 
 const handleGetCursorPosition = (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
 ): ScreenPoint => {
-  if (!isCompanionRenderer(event.sender)) {
-    throw new Error('Cursor position is unavailable to this window.');
-  }
-
   return screen.getCursorScreenPoint();
 };
 
 const handleGetRuntimeSettings = (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
 ): RuntimeSettings => {
-  if (!isCompanionRenderer(event.sender)) {
-    throw new Error('Runtime settings are unavailable to this window.');
-  }
-
   return toRuntimeSettings(getSettingsService().get());
 };
 
 const handleGetPreferencesSettings = (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
 ): PreferencesSettings => {
-  if (!isPreferencesRenderer(event.sender)) {
-    throw new Error('Preferences settings are unavailable to this window.');
-  }
-
   return toPreferencesSettings(getSettingsService().get());
 };
 
 const handleUpdatePreferencesSettings = async (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
   value: unknown,
 ): Promise<PreferencesSettings> => {
-  if (!isPreferencesRenderer(event.sender)) {
-    throw new Error('Preferences updates are unavailable to this window.');
-  }
-
   const patch: PreferencesSettingsPatch | null =
     parsePreferencesSettingsPatch(value);
 
@@ -364,13 +389,9 @@ const handleUpdatePreferencesSettings = async (
 };
 
 const handleUpdateAiConfiguration = async (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
   value: unknown,
 ): Promise<PreferencesSettings> => {
-  if (!isPreferencesRenderer(event.sender)) {
-    throw new Error('AI configuration is unavailable to this window.');
-  }
-
   const configuration: AiConfigurationUpdate | null =
     parseAiConfigurationUpdate(value);
 
@@ -378,7 +399,41 @@ const handleUpdateAiConfiguration = async (
     throw new TypeError('Invalid AI configuration update.');
   }
 
+  const currentAiSettings = getSettingsService().get().ai;
+  const nextProvider =
+    configuration.provider ?? currentAiSettings.provider;
+
+  if (nextProvider === 'ollama') {
+    const nextEndpoint =
+      configuration.endpoint ?? currentAiSettings.endpoint;
+
+    try {
+      ollamaEndpointPolicy.parse(nextEndpoint);
+    } catch (error) {
+      console.warn('[security] ollama_endpoint_rejected', {
+        operation: 'settings_update',
+        reason:
+          error instanceof OllamaEndpointPolicyError
+            ? error.code
+            : 'validation_failed',
+      });
+      throw new TypeError(
+        'Ollama only supports local endpoints using localhost or 127.0.0.1.',
+      );
+    }
+  }
+
   let settings: AppSettings;
+  const configurationChanged =
+    (configuration.enabled !== undefined &&
+      configuration.enabled !== currentAiSettings.enabled) ||
+    (configuration.provider !== undefined &&
+      configuration.provider !== currentAiSettings.provider) ||
+    (configuration.model !== undefined &&
+      configuration.model !== currentAiSettings.model) ||
+    (configuration.endpoint !== undefined &&
+      configuration.endpoint !== currentAiSettings.endpoint) ||
+    configuration.apiKey !== undefined;
 
   try {
     settings =
@@ -391,6 +446,10 @@ const handleUpdateAiConfiguration = async (
     }
 
     throw error;
+  }
+
+  if (configurationChanged) {
+    aiRequestManager.cancelAll('provider_changed');
   }
 
   await synchronizeAISettings(settings);
@@ -418,106 +477,190 @@ const logUnexpectedAIError = (operation: string, error: unknown): void => {
 
   console.error(`[ai] ${operation}_failed`, {
     name: error instanceof Error ? error.name : 'UnknownError',
-    message: error instanceof Error ? error.message : 'Unknown failure',
   });
 };
 
+const getAIRequestPolicyMessage = (error: unknown): string | null =>
+  error instanceof AIRequestPolicyError ? error.message : null;
+
 const handleAskAI = async (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
   value: unknown,
 ): Promise<AIAskResult> => {
-  if (!isCompanionRenderer(event.sender)) {
-    throw new Error('AI requests are unavailable to this window.');
-  }
-
-  if (typeof value !== 'string') {
-    throw new TypeError('AI prompt must be a string.');
-  }
-
-  const prompt = value.trim();
-
-  if (prompt.length === 0) {
-    throw new TypeError('AI prompt must not be empty.');
-  }
-
-  if (prompt.length > MAX_AI_PROMPT_LENGTH) {
-    throw new RangeError(
-      `AI prompt must not exceed ${MAX_AI_PROMPT_LENGTH} characters.`,
-    );
-  }
-
   try {
-    const response = await getAIService().ask(prompt);
-    return { ok: true, response };
+    return await aiRequestManager.run(
+      'companion',
+      'chat',
+      async (signal) => {
+        if (typeof value !== 'string') {
+          throw new TypeError('AI prompt must be a string.');
+        }
+
+        const prompt = value.trim();
+
+        if (prompt.length === 0) {
+          throw new TypeError('AI prompt must not be empty.');
+        }
+
+        if (prompt.length > MAX_AI_PROMPT_LENGTH) {
+          throw new RangeError(
+            `AI prompt must not exceed ${MAX_AI_PROMPT_LENGTH} characters.`,
+          );
+        }
+
+        try {
+          const response = await getAIService().ask(prompt, { signal });
+          return { ok: true, response };
+        } catch (error) {
+          logUnexpectedAIError('request', error);
+          return {
+            ok: false,
+            message: getAIServiceErrorMessage(error),
+          };
+        }
+      },
+    );
   } catch (error) {
-    logUnexpectedAIError('request', error);
-    return { ok: false, message: getAIServiceErrorMessage(error) };
+    const policyMessage = getAIRequestPolicyMessage(error);
+
+    if (policyMessage !== null) {
+      return { ok: false, message: policyMessage };
+    }
+
+    throw error;
   }
 };
 
 const handleListAIModels = async (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
 ): Promise<AIModelListResult> => {
-  if (!isPreferencesRenderer(event.sender)) {
-    throw new Error('AI models are unavailable to this window.');
-  }
-
   try {
-    const models = await getAIService().listModels();
-    return { ok: true, models };
+    return await aiRequestManager.run(
+      'preferences',
+      'model_discovery',
+      async (signal) => {
+        try {
+          const models = await getAIService().listModels({ signal });
+          return { ok: true, models };
+        } catch (error) {
+          logUnexpectedAIError('model_list', error);
+          return {
+            ok: false,
+            message: getAIServiceErrorMessage(error),
+          };
+        }
+      },
+    );
   } catch (error) {
-    logUnexpectedAIError('model_list', error);
-    return { ok: false, message: getAIServiceErrorMessage(error) };
+    const policyMessage = getAIRequestPolicyMessage(error);
+
+    if (policyMessage !== null) {
+      return { ok: false, message: policyMessage };
+    }
+
+    throw error;
   }
 };
 
 const handleTestAIConnection = async (
-  event: IpcMainInvokeEvent,
+  _event: IpcMainInvokeEvent,
 ): Promise<AIConnectionTestResult> => {
-  if (!isPreferencesRenderer(event.sender)) {
-    throw new Error('AI connection testing is unavailable to this window.');
-  }
-
   try {
-    const result = await getAIService().testConnection();
-    return { ok: true, ...result };
+    return await aiRequestManager.run(
+      'preferences',
+      'connection_test',
+      async (signal) => {
+        try {
+          const result =
+            await getAIService().testConnection({ signal });
+          return { ok: true, ...result };
+        } catch (error) {
+          logUnexpectedAIError('connection_test', error);
+          return {
+            ok: false,
+            message: getAIServiceErrorMessage(error),
+          };
+        }
+      },
+    );
   } catch (error) {
-    logUnexpectedAIError('connection_test', error);
-    return { ok: false, message: getAIServiceErrorMessage(error) };
+    const policyMessage = getAIRequestPolicyMessage(error);
+
+    if (policyMessage !== null) {
+      return { ok: false, message: policyMessage };
+    }
+
+    throw error;
   }
 };
+
+const authorizedMoveWindowHandler = ipcAuthorizer.protectEvent(
+  IPC_CHANNELS.moveWindow,
+  handleMoveWindow,
+);
+const authorizedContextMenuHandler = ipcAuthorizer.protectEvent(
+  IPC_CHANNELS.showCompanionContextMenu,
+  handleShowCompanionContextMenu,
+);
 
 const registerIpcHandlers = (): void => {
   ipcMain.handle(
     IPC_CHANNELS.getCursorPosition,
-    handleGetCursorPosition,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getCursorPosition,
+      handleGetCursorPosition,
+    ),
   );
   ipcMain.handle(
     IPC_CHANNELS.getRuntimeSettings,
-    handleGetRuntimeSettings,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getRuntimeSettings,
+      handleGetRuntimeSettings,
+    ),
   );
   ipcMain.handle(
     IPC_CHANNELS.getPreferencesSettings,
-    handleGetPreferencesSettings,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getPreferencesSettings,
+      handleGetPreferencesSettings,
+    ),
   );
   ipcMain.handle(
     IPC_CHANNELS.updatePreferencesSettings,
-    handleUpdatePreferencesSettings,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.updatePreferencesSettings,
+      handleUpdatePreferencesSettings,
+    ),
   );
   ipcMain.handle(
     IPC_CHANNELS.updateAiConfiguration,
-    handleUpdateAiConfiguration,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.updateAiConfiguration,
+      handleUpdateAiConfiguration,
+    ),
   );
-  ipcMain.handle(IPC_CHANNELS.askAI, handleAskAI);
-  ipcMain.handle(IPC_CHANNELS.listAIModels, handleListAIModels);
+  ipcMain.handle(
+    IPC_CHANNELS.askAI,
+    ipcAuthorizer.protectInvoke(IPC_CHANNELS.askAI, handleAskAI),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.listAIModels,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.listAIModels,
+      handleListAIModels,
+    ),
+  );
   ipcMain.handle(
     IPC_CHANNELS.testAIConnection,
-    handleTestAIConnection,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.testAIConnection,
+      handleTestAIConnection,
+    ),
   );
-  ipcMain.on(IPC_CHANNELS.moveWindow, handleMoveWindow);
+  ipcMain.on(IPC_CHANNELS.moveWindow, authorizedMoveWindowHandler);
   ipcMain.on(
     IPC_CHANNELS.showCompanionContextMenu,
-    handleShowCompanionContextMenu,
+    authorizedContextMenuHandler,
   );
 };
 
@@ -530,10 +673,13 @@ const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.askAI);
   ipcMain.removeHandler(IPC_CHANNELS.listAIModels);
   ipcMain.removeHandler(IPC_CHANNELS.testAIConnection);
-  ipcMain.removeListener(IPC_CHANNELS.moveWindow, handleMoveWindow);
+  ipcMain.removeListener(
+    IPC_CHANNELS.moveWindow,
+    authorizedMoveWindowHandler,
+  );
   ipcMain.removeListener(
     IPC_CHANNELS.showCompanionContextMenu,
-    handleShowCompanionContextMenu,
+    authorizedContextMenuHandler,
   );
 };
 
@@ -564,7 +710,7 @@ void app.whenReady().then(async () => {
   try {
     await synchronizeAISettings(settingsService.get());
   } catch (error) {
-    console.error('[ai] configuration_failed', error);
+    logUnexpectedAIError('configuration', error);
   }
 
   registerIpcHandlers();
@@ -587,12 +733,13 @@ void app.whenReady().then(async () => {
 
 app.once('before-quit', () => {
   app.removeListener('activate', showMainWindow);
+  aiRequestManager.cancelAll('application_quit');
   unsubscribeFromSettings?.();
   unsubscribeFromSettings = null;
   const activeAIService = aiService;
   aiService = null;
   void activeAIService?.dispose().catch((error: unknown) => {
-    console.error('[ai] dispose_failed', error);
+    logUnexpectedAIError('dispose', error);
   });
   unregisterIpcHandlers();
   tray?.destroy();

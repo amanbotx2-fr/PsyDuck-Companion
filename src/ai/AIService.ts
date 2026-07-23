@@ -1,8 +1,14 @@
 import { createHash } from 'node:crypto';
 
+import {
+  limitAIConnectionResult,
+  limitAIResponse,
+  normalizeAIModels,
+} from './AIAbuseLimits';
 import type { AIContext } from './AIContext';
 import {
   isAIProviderId,
+  type AIOperationOptions,
   type AIConnectionResult,
   type AIModel,
   type AIProvider,
@@ -13,6 +19,7 @@ import {
 } from './AIProvider';
 
 export type AIServiceErrorCode =
+  | 'cancelled'
   | 'disabled'
   | 'disposed'
   | 'empty_prompt'
@@ -38,7 +45,7 @@ export interface AIServiceConfiguration {
   readonly endpoint: string;
 }
 
-export interface AIAskOptions {
+export interface AIAskOptions extends AIOperationOptions {
   readonly context?: AIContext;
 }
 
@@ -141,8 +148,10 @@ export class AIService {
     prompt: string,
     options: AIAskOptions = {},
   ): Promise<AIResponse> {
+    this.assertOperationActive(options.signal);
     await this.operationQueue;
     this.assertNotDisposed();
+    this.assertOperationActive(options.signal);
 
     if (!this.enabled) {
       throw new AIServiceError('disabled', 'AI features are disabled.');
@@ -180,19 +189,39 @@ export class AIService {
         : { context: options.context }),
     };
 
-    return provider.sendMessage(request);
+    const response = await provider.sendMessage(
+      request,
+      this.toOperationOptions(options.signal),
+    );
+    this.assertOperationActive(options.signal);
+    return limitAIResponse(response);
   }
 
-  public async listModels(): Promise<readonly AIModel[]> {
+  public async listModels(
+    options: AIOperationOptions = {},
+  ): Promise<readonly AIModel[]> {
+    this.assertOperationActive(options.signal);
     await this.operationQueue;
     this.assertNotDisposed();
-    return this.requireActiveProvider().listModels();
+    this.assertOperationActive(options.signal);
+
+    const models = await this.requireActiveProvider().listModels(options);
+    this.assertOperationActive(options.signal);
+    return normalizeAIModels(models);
   }
 
-  public async testConnection(): Promise<AIConnectionResult> {
+  public async testConnection(
+    options: AIOperationOptions = {},
+  ): Promise<AIConnectionResult> {
+    this.assertOperationActive(options.signal);
     await this.operationQueue;
     this.assertNotDisposed();
-    return this.requireActiveProvider().testConnection();
+    this.assertOperationActive(options.signal);
+
+    const result =
+      await this.requireActiveProvider().testConnection(options);
+    this.assertOperationActive(options.signal);
+    return limitAIConnectionResult(result);
   }
 
   public dispose(): Promise<void> {
@@ -238,6 +267,21 @@ export class AIService {
         'The AI service has been disposed.',
       );
     }
+  }
+
+  private assertOperationActive(signal: AbortSignal | undefined): void {
+    if (signal?.aborted === true) {
+      throw new AIServiceError(
+        'cancelled',
+        'The AI operation was cancelled.',
+      );
+    }
+  }
+
+  private toOperationOptions(
+    signal: AbortSignal | undefined,
+  ): AIOperationOptions {
+    return signal === undefined ? {} : { signal };
   }
 
   private requireActiveProvider(): AIProvider {

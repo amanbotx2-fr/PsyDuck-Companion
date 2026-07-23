@@ -2,6 +2,7 @@ import { BrowserWindow, nativeTheme } from 'electron';
 import { join } from 'node:path';
 
 import { APP_NAME } from '../shared/constants';
+import { electronPermissionPolicy } from './permissionPolicy';
 import {
   hardenRendererNavigation,
   loadRenderer,
@@ -32,6 +33,10 @@ export const createPreferencesWindow = (): BrowserWindow => {
     },
   });
 
+  electronPermissionPolicy.registerWindow(
+    preferencesWindow,
+    'preferences',
+  );
   preferencesWindow.setMenu(null);
   preferencesWindow.once('ready-to-show', () => {
     preferencesWindow.show();

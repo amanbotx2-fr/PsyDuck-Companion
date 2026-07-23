@@ -3,6 +3,13 @@ import type { GoogleGenAI as GoogleGenAIClient } from '@google/genai' with {
 };
 
 import {
+  MAXIMUM_AI_MODEL_CANDIDATES,
+  MAXIMUM_AI_MODEL_DISPLAY_NAME_CHARACTERS,
+  MAXIMUM_AI_MODEL_ID_CHARACTERS,
+  MAXIMUM_AI_OUTPUT_TOKENS,
+} from '../AIAbuseLimits';
+import {
+  type AIOperationOptions,
   type AIConnectionResult,
   type AIModel,
   type AIProvider,
@@ -50,7 +57,10 @@ export class GeminiProvider implements AIProvider {
     return this.client !== null && this.model.length > 0;
   }
 
-  public async sendMessage(request: AIRequest): Promise<AIResponse> {
+  public async sendMessage(
+    request: AIRequest,
+    options: AIOperationOptions = {},
+  ): Promise<AIResponse> {
     const client = this.requireClient();
     const model = this.requireModel();
 
@@ -58,6 +68,12 @@ export class GeminiProvider implements AIProvider {
       const response = await client.models.generateContent({
         model,
         contents: request.prompt,
+        config: {
+          maxOutputTokens: MAXIMUM_AI_OUTPUT_TOKENS,
+          ...(options.signal === undefined
+            ? {}
+            : { abortSignal: options.signal }),
+        },
       });
       const content = response.text?.trim() ?? '';
 
@@ -88,7 +104,9 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
-  public async listModels(): Promise<readonly AIModel[]> {
+  public async listModels(
+    options: AIOperationOptions = {},
+  ): Promise<readonly AIModel[]> {
     const client = this.requireClient();
 
     try {
@@ -96,11 +114,21 @@ export class GeminiProvider implements AIProvider {
         config: {
           pageSize: MODEL_PAGE_SIZE,
           queryBase: true,
+          ...(options.signal === undefined
+            ? {}
+            : { abortSignal: options.signal }),
         },
       });
       const models: AIModel[] = [];
+      let inspectedModels = 0;
 
       for await (const model of pager) {
+        inspectedModels += 1;
+
+        if (inspectedModels > MAXIMUM_AI_MODEL_CANDIDATES) {
+          break;
+        }
+
         const supportsGenerateContent = model.supportedActions?.some(
           (action) =>
             action.replaceAll('_', '').toLowerCase() ===
@@ -111,12 +139,25 @@ export class GeminiProvider implements AIProvider {
           continue;
         }
 
-        const id = (model.name ?? '').replace(/^models\//, '');
+        const modelName = model.name ?? '';
+
+        if (
+          modelName.length >
+          MAXIMUM_AI_MODEL_ID_CHARACTERS + 'models/'.length
+        ) {
+          continue;
+        }
+
+        const id = modelName.replace(/^models\//, '');
+        const displayName =
+          typeof model.displayName === 'string' &&
+          model.displayName.length <=
+            MAXIMUM_AI_MODEL_DISPLAY_NAME_CHARACTERS
+            ? model.displayName
+            : undefined;
         models.push({
           id,
-          ...(model.displayName === undefined
-            ? {}
-            : { displayName: model.displayName }),
+          ...(displayName === undefined ? {} : { displayName }),
         });
       }
 
@@ -126,7 +167,9 @@ export class GeminiProvider implements AIProvider {
     }
   }
 
-  public async testConnection(): Promise<AIConnectionResult> {
+  public async testConnection(
+    options: AIOperationOptions = {},
+  ): Promise<AIConnectionResult> {
     const client = this.requireClient();
 
     try {
@@ -134,6 +177,9 @@ export class GeminiProvider implements AIProvider {
         config: {
           pageSize: 1,
           queryBase: true,
+          ...(options.signal === undefined
+            ? {}
+            : { abortSignal: options.signal }),
         },
       });
 

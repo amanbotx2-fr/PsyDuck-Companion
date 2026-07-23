@@ -1,5 +1,10 @@
 import { OpenAICompatibleProvider } from './OpenAICompatibleProvider';
-import type { AIModel } from '../AIProvider';
+import {
+  MAXIMUM_AI_MODEL_CANDIDATES,
+  MAXIMUM_AI_MODEL_DISPLAY_NAME_CHARACTERS,
+  MAXIMUM_AI_MODEL_ID_CHARACTERS,
+} from '../AIAbuseLimits';
+import type { AIOperationOptions, AIModel } from '../AIProvider';
 import { normalizeModels, toProviderError } from './providerUtils';
 
 const XAI_API_BASE_URL = 'https://api.x.ai/v1';
@@ -19,36 +24,73 @@ export class GrokProvider extends OpenAICompatibleProvider {
     super('grok', 'Grok', XAI_API_BASE_URL);
   }
 
-  public override async listModels(): Promise<readonly AIModel[]> {
+  public override async listModels(
+    options: AIOperationOptions = {},
+  ): Promise<readonly AIModel[]> {
     const client = this.requireClient();
 
     try {
       const response = await client.get<XAILanguageModelsResponse>(
         '/language-models',
+        options.signal === undefined
+          ? undefined
+          : { signal: options.signal },
       );
       const languageModels = response.models ?? [];
+      const models: AIModel[] = [];
+      let inspectedModels = 0;
 
-      return normalizeModels(
-        languageModels.flatMap((model) => {
+      modelLoop: for (const model of languageModels) {
+        inspectedModels += 1;
+
+        if (inspectedModels > MAXIMUM_AI_MODEL_CANDIDATES) {
+          break;
+        }
+
+        if (
+          model.output_modalities !== undefined &&
+          !model.output_modalities.includes('text')
+        ) {
+          continue;
+        }
+
+        const rawId =
+          typeof model.id === 'string' ? model.id : '';
+        const id =
+          rawId.length <= MAXIMUM_AI_MODEL_ID_CHARACTERS
+            ? rawId.trim()
+            : '';
+        models.push({ id });
+
+        if (models.length >= MAXIMUM_AI_MODEL_CANDIDATES) {
+          break;
+        }
+
+        for (const alias of model.aliases ?? []) {
           if (
-            model.output_modalities !== undefined &&
-            !model.output_modalities.includes('text')
+            typeof alias !== 'string' ||
+            alias.length > MAXIMUM_AI_MODEL_ID_CHARACTERS
           ) {
-            return [];
+            continue;
           }
 
-          const id = model.id?.trim() ?? '';
-          const aliases = model.aliases ?? [];
+          const hasBoundedDisplayName =
+            alias.length + id.length + 3 <=
+            MAXIMUM_AI_MODEL_DISPLAY_NAME_CHARACTERS;
+          models.push({
+            id: alias,
+            ...(hasBoundedDisplayName
+              ? { displayName: `${alias} (${id})` }
+              : {}),
+          });
 
-          return [
-            { id },
-            ...aliases.map((alias) => ({
-              id: alias,
-              displayName: `${alias} (${id})`,
-            })),
-          ];
-        }),
-      );
+          if (models.length >= MAXIMUM_AI_MODEL_CANDIDATES) {
+            break modelLoop;
+          }
+        }
+      }
+
+      return normalizeModels(models);
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
     }
