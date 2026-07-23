@@ -4,11 +4,26 @@ export const SPEECH_BUBBLE_TRANSITION_DURATION_MS = 200;
 export const DEFAULT_SPEECH_BUBBLE_DURATION_MS = 4_000;
 
 const EXIT_TRANSITION_BUFFER_MS = 50;
+const MAXIMUM_SPEECH_BUBBLE_ACTIONS = 3;
+
+export type SpeechBubbleVariant = 'notification' | 'conversation';
+export type SpeechBubbleFormat = 'plain' | 'markdown';
+
+export interface SpeechBubbleAction {
+  readonly id: string;
+  readonly label: string;
+  readonly onSelect: () => void;
+}
 
 export interface SpeechBubbleOptions {
   readonly icon?: string;
   readonly duration?: number;
   readonly persistent?: boolean;
+  readonly variant?: SpeechBubbleVariant;
+  readonly format?: SpeechBubbleFormat;
+  readonly pending?: boolean;
+  readonly typewriter?: boolean;
+  readonly actions?: readonly SpeechBubbleAction[];
 }
 
 export interface SpeechBubbleMessage {
@@ -17,6 +32,11 @@ export interface SpeechBubbleMessage {
   readonly icon: string | null;
   readonly duration: number;
   readonly persistent: boolean;
+  readonly variant: SpeechBubbleVariant;
+  readonly format: SpeechBubbleFormat;
+  readonly pending: boolean;
+  readonly typewriter: boolean;
+  readonly actions: readonly SpeechBubbleAction[];
 }
 
 export type SpeechBubbleVisibility =
@@ -45,6 +65,7 @@ export interface SpeechBubbleController extends SpeechBubbleApi {
   readonly visibility: SpeechBubbleVisibility;
   readonly queuedMessageCount: number;
   readonly notifyExitTransitionEnd: () => void;
+  readonly notifyContentReady: (messageId: number) => void;
 }
 
 type SpeechBubbleListener = () => void;
@@ -65,6 +86,7 @@ class SpeechBubbleStore {
     null;
   private exitFallbackTimerId: ReturnType<typeof globalThis.setTimeout> | null =
     null;
+  private contentReadyMessageId: number | null = null;
 
   readonly subscribe = (listener: SpeechBubbleListener): (() => void) => {
     this.listeners.add(listener);
@@ -95,6 +117,47 @@ class SpeechBubbleStore {
       );
     }
 
+    const pending = options.pending ?? false;
+    const typewriter = options.typewriter ?? false;
+
+    if (pending && typewriter) {
+      throw new TypeError(
+        'A speech bubble cannot be pending and use a typewriter animation.',
+      );
+    }
+
+    const actions = options.actions ?? [];
+
+    if (actions.length > MAXIMUM_SPEECH_BUBBLE_ACTIONS) {
+      throw new RangeError(
+        `A speech bubble supports at most ${MAXIMUM_SPEECH_BUBBLE_ACTIONS} actions.`,
+      );
+    }
+
+    const actionIds = new Set<string>();
+    const normalizedActions = actions.map((action) => {
+      const id = action.id.trim();
+      const label = action.label.trim();
+
+      if (
+        id.length === 0 ||
+        label.length === 0 ||
+        actionIds.has(id) ||
+        typeof action.onSelect !== 'function'
+      ) {
+        throw new TypeError(
+          'Speech bubble actions require unique, non-empty IDs and labels plus a handler.',
+        );
+      }
+
+      actionIds.add(id);
+      return {
+        id,
+        label,
+        onSelect: action.onSelect,
+      };
+    });
+
     const normalizedIcon = options.icon?.trim() ?? '';
     const message: SpeechBubbleMessage = {
       id: this.nextMessageId,
@@ -102,6 +165,11 @@ class SpeechBubbleStore {
       icon: normalizedIcon.length > 0 ? normalizedIcon : null,
       duration,
       persistent: options.persistent ?? false,
+      variant: options.variant ?? 'notification',
+      format: options.format ?? 'plain',
+      pending,
+      typewriter,
+      actions: normalizedActions,
     };
 
     this.nextMessageId += 1;
@@ -156,6 +224,7 @@ class SpeechBubbleStore {
     }
 
     this.clearExitFallbackTimer();
+    this.contentReadyMessageId = null;
     this.publish(null, 'hidden');
 
     globalThis.queueMicrotask(() => {
@@ -163,6 +232,23 @@ class SpeechBubbleStore {
         this.activateNextMessage();
       }
     });
+  };
+
+  readonly notifyContentReady = (messageId: number): void => {
+    const { currentMessage, visibility } = this.snapshot;
+
+    if (
+      currentMessage?.id !== messageId ||
+      !currentMessage.typewriter
+    ) {
+      return;
+    }
+
+    this.contentReadyMessageId = messageId;
+
+    if (visibility === 'visible') {
+      this.scheduleAutoHide(currentMessage);
+    }
   };
 
   private activateNextMessage(): void {
@@ -177,6 +263,7 @@ class SpeechBubbleStore {
       return;
     }
 
+    this.contentReadyMessageId = null;
     this.publish(nextMessage, 'entering');
     this.cancelEntryFrame();
     this.entryFrameId = requestAnimationFrame(() => {
@@ -191,7 +278,13 @@ class SpeechBubbleStore {
         }
 
         this.publish(nextMessage, 'visible');
-        this.scheduleAutoHide(nextMessage);
+
+        if (
+          !nextMessage.typewriter ||
+          this.contentReadyMessageId === nextMessage.id
+        ) {
+          this.scheduleAutoHide(nextMessage);
+        }
       });
     });
   }
@@ -272,6 +365,7 @@ export function useSpeechBubble(): SpeechBubbleController {
     hide,
     clearQueue,
     notifyExitTransitionEnd: speechBubbleStore.completeExit,
+    notifyContentReady: speechBubbleStore.notifyContentReady,
   };
 }
 

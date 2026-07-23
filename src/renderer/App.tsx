@@ -214,7 +214,12 @@ export function App() {
         normalizedResponse.length > 0
           ? normalizedResponse
           : personalityService.getErrorMessage(),
-        { duration: AI_RESPONSE_DURATION_MS },
+        {
+          duration: AI_RESPONSE_DURATION_MS,
+          format: 'markdown',
+          typewriter: true,
+          variant: 'conversation',
+        },
       );
 
       submissionInProgressRef.current = false;
@@ -329,7 +334,9 @@ export function App() {
       speechBubble.clearQueue();
       speechBubble.hide();
       speechBubble.show(personalityService.getThinkingMessage(), {
+        pending: true,
         persistent: true,
+        variant: 'conversation',
       });
 
       const request = window.psyduck?.askAI(normalizedPrompt);
@@ -1115,6 +1122,7 @@ export function App() {
               onExitTransitionEnd={
                 speechBubble.notifyExitTransitionEnd
               }
+              onContentReady={speechBubble.notifyContentReady}
             />
           </CompanionWidget>
         )}
