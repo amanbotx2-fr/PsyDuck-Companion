@@ -47,6 +47,8 @@ export const DEFAULT_CUSTOM_AI_BASE_URL = '';
 export const DEFAULT_USER_NAME = 'Friend';
 export const MAXIMUM_USER_NAME_LENGTH = 30;
 export const MAXIMUM_STICKY_MESSAGE_LENGTH = 120;
+export const MAXIMUM_FAVORITE_AI_MODELS = 512;
+export const MAXIMUM_RECENT_AI_MODELS_PER_PROVIDER = 5;
 
 export const normalizeUserName = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -223,6 +225,16 @@ export interface AiSettings {
   readonly baseUrl: string;
 }
 
+export interface AiModelReference {
+  readonly provider: AiProvider;
+  readonly modelId: string;
+}
+
+export interface AiModelExplorerSettings {
+  readonly favorites: readonly AiModelReference[];
+  readonly recent: readonly AiModelReference[];
+}
+
 export interface AppSettings {
   readonly userName: string;
   readonly stickyMessage: string | null;
@@ -230,6 +242,7 @@ export interface AppSettings {
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
   readonly ai: AiSettings;
+  readonly aiModelExplorer: AiModelExplorerSettings;
 }
 
 export interface RuntimeSettings {
@@ -254,6 +267,7 @@ export interface PreferencesSettings {
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
   readonly ai: PreferencesAiSettings;
+  readonly aiModelExplorer: AiModelExplorerSettings;
 }
 
 export interface GeneralSettingsPatch {
@@ -275,6 +289,11 @@ export interface AiSettingsPatch {
   readonly baseUrl?: string;
 }
 
+export interface AiModelExplorerSettingsPatch {
+  readonly favorites?: readonly AiModelReference[];
+  readonly recent?: readonly AiModelReference[];
+}
+
 export interface SettingsPatch {
   readonly userName?: string;
   readonly stickyMessage?: string | null;
@@ -282,11 +301,13 @@ export interface SettingsPatch {
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
   readonly ai?: AiSettingsPatch;
+  readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
 }
 
 export interface PreferencesSettingsPatch {
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
+  readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
 }
 
 // Credentials may travel only from Preferences to main through the dedicated
@@ -315,6 +336,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     apiKeyConfigured: false,
     endpoint: DEFAULT_OLLAMA_ENDPOINT,
     baseUrl: DEFAULT_CUSTOM_AI_BASE_URL,
+  },
+  aiModelExplorer: {
+    favorites: [],
+    recent: [],
   },
 };
 
@@ -347,7 +372,18 @@ const AI_PATCH_KEYS = [
   'baseUrl',
 ] as const;
 const AI_CONFIGURATION_KEYS = [...AI_PATCH_KEYS, 'apiKey'] as const;
+const AI_MODEL_REFERENCE_KEYS = ['provider', 'modelId'] as const;
+const AI_MODEL_EXPLORER_KEYS = ['favorites', 'recent'] as const;
 const ROOT_SETTING_KEYS = [
+  'userName',
+  'stickyMessage',
+  'reminders',
+  'general',
+  'water',
+  'ai',
+  'aiModelExplorer',
+] as const;
+const REQUIRED_ROOT_SETTING_KEYS = [
   'userName',
   'stickyMessage',
   'reminders',
@@ -358,6 +394,8 @@ const ROOT_SETTING_KEYS = [
 const MAXIMUM_MODEL_LENGTH = 256;
 const MAXIMUM_API_KEY_LENGTH = 4_096;
 const MAXIMUM_ENDPOINT_LENGTH = 2_048;
+const MAXIMUM_RECENT_AI_MODELS =
+  AI_PROVIDER_OPTIONS.length * MAXIMUM_RECENT_AI_MODELS_PER_PROVIDER;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -425,6 +463,86 @@ const parseWaterPatch = (value: unknown): WaterSettingsPatch | null => {
   };
 };
 
+const parseAiModelReference = (
+  value: unknown,
+): AiModelReference | null => {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, AI_MODEL_REFERENCE_KEYS) ||
+    !hasEveryKey(value, AI_MODEL_REFERENCE_KEYS) ||
+    !isAiProvider(value.provider) ||
+    typeof value.modelId !== 'string'
+  ) {
+    return null;
+  }
+
+  const modelId = value.modelId.trim();
+
+  return modelId.length > 0 && modelId.length <= MAXIMUM_MODEL_LENGTH
+    ? { provider: value.provider, modelId }
+    : null;
+};
+
+const parseAiModelReferences = (
+  value: unknown,
+  maximumLength: number,
+): readonly AiModelReference[] | null => {
+  if (!Array.isArray(value) || value.length > maximumLength) {
+    return null;
+  }
+
+  const references: AiModelReference[] = [];
+  const seenReferences = new Set<string>();
+
+  for (const candidate of value) {
+    const reference = parseAiModelReference(candidate);
+
+    if (reference === null) {
+      return null;
+    }
+
+    const referenceKey = `${reference.provider}\u0000${reference.modelId}`;
+
+    if (seenReferences.has(referenceKey)) {
+      continue;
+    }
+
+    seenReferences.add(referenceKey);
+    references.push(reference);
+  }
+
+  return references;
+};
+
+const parseAiModelExplorerPatch = (
+  value: unknown,
+): AiModelExplorerSettingsPatch | null => {
+  if (!isRecord(value) || !hasOnlyKeys(value, AI_MODEL_EXPLORER_KEYS)) {
+    return null;
+  }
+
+  const favorites =
+    value.favorites === undefined
+      ? undefined
+      : parseAiModelReferences(
+          value.favorites,
+          MAXIMUM_FAVORITE_AI_MODELS,
+        );
+  const recent =
+    value.recent === undefined
+      ? undefined
+      : parseAiModelReferences(value.recent, MAXIMUM_RECENT_AI_MODELS);
+
+  if (favorites === null || recent === null) {
+    return null;
+  }
+
+  return {
+    ...(favorites === undefined ? {} : { favorites }),
+    ...(recent === undefined ? {} : { recent }),
+  };
+};
+
 const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
   if (!isRecord(value) || !hasOnlyKeys(value, AI_PATCH_KEYS)) {
     return null;
@@ -473,6 +591,10 @@ export const parseSettingsPatch = (
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
   const ai = value.ai === undefined ? undefined : parseAiPatch(value.ai);
+  const aiModelExplorer =
+    value.aiModelExplorer === undefined
+      ? undefined
+      : parseAiModelExplorerPatch(value.aiModelExplorer);
   const userName =
     value.userName === undefined
       ? undefined
@@ -492,6 +614,7 @@ export const parseSettingsPatch = (
     general === null ||
     water === null ||
     ai === null ||
+    aiModelExplorer === null ||
     userName === null ||
     (value.stickyMessage !== undefined &&
       value.stickyMessage !== null &&
@@ -508,6 +631,7 @@ export const parseSettingsPatch = (
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
     ...(ai === undefined ? {} : { ai }),
+    ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
   };
 };
 
@@ -516,7 +640,7 @@ export const parsePreferencesSettingsPatch = (
 ): PreferencesSettingsPatch | null => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['general', 'water'])
+    !hasOnlyKeys(value, ['general', 'water', 'aiModelExplorer'])
   ) {
     return null;
   }
@@ -525,14 +649,23 @@ export const parsePreferencesSettingsPatch = (
     value.general === undefined ? undefined : parseGeneralPatch(value.general);
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
+  const aiModelExplorer =
+    value.aiModelExplorer === undefined
+      ? undefined
+      : parseAiModelExplorerPatch(value.aiModelExplorer);
 
-  if (general === null || water === null) {
+  if (
+    general === null ||
+    water === null ||
+    aiModelExplorer === null
+  ) {
     return null;
   }
 
   return {
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
+    ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
   };
 };
 
@@ -583,6 +716,15 @@ export const mergeSettings = (
     ...settings.ai,
     ...patch.ai,
   },
+  aiModelExplorer: {
+    favorites: (
+      patch.aiModelExplorer?.favorites ??
+      settings.aiModelExplorer.favorites
+    ).map((reference) => ({ ...reference })),
+    recent: (
+      patch.aiModelExplorer?.recent ?? settings.aiModelExplorer.recent
+    ).map((reference) => ({ ...reference })),
+  },
 });
 
 export const createDefaultSettings = (): AppSettings =>
@@ -615,6 +757,14 @@ export const toPreferencesSettings = (
     endpoint: settings.ai.endpoint,
     baseUrl: settings.ai.baseUrl,
   },
+  aiModelExplorer: {
+    favorites: settings.aiModelExplorer.favorites.map((reference) => ({
+      ...reference,
+    })),
+    recent: settings.aiModelExplorer.recent.map((reference) => ({
+      ...reference,
+    })),
+  },
 });
 
 export const createDefaultRuntimeSettings = (): RuntimeSettings =>
@@ -637,13 +787,22 @@ export const mergePreferencesSettings = (
     ...patch.water,
   },
   ai: { ...settings.ai },
+  aiModelExplorer: {
+    favorites: (
+      patch.aiModelExplorer?.favorites ??
+      settings.aiModelExplorer.favorites
+    ).map((reference) => ({ ...reference })),
+    recent: (
+      patch.aiModelExplorer?.recent ?? settings.aiModelExplorer.recent
+    ).map((reference) => ({ ...reference })),
+  },
 });
 
 export const parseSettings = (value: unknown): AppSettings | null => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, ROOT_SETTING_KEYS) ||
-    !hasEveryKey(value, ROOT_SETTING_KEYS) ||
+    !hasEveryKey(value, REQUIRED_ROOT_SETTING_KEYS) ||
     normalizeUserName(value.userName) === null ||
     parseStoredReminders(value.reminders) === null ||
     !isRecord(value.general) ||
@@ -668,6 +827,9 @@ export const parseSettings = (value: unknown): AppSettings | null => {
     general: value.general,
     water: value.water,
     ai: aiPatchValue,
+    ...(value.aiModelExplorer === undefined
+      ? {}
+      : { aiModelExplorer: value.aiModelExplorer }),
   });
 
   if (patch === null) {

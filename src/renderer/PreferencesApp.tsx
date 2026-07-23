@@ -8,6 +8,12 @@ import {
 
 import type { AIProviderHttpDiagnostics } from '../ai/AIProvider';
 import {
+  createModelReference,
+  recordRecentModel,
+  toggleFavoriteModel,
+  type ModelExplorerSource,
+} from '../shared/modelMetadata';
+import {
   AI_PROVIDER_OPTIONS,
   isAiProvider,
   isValidAiEndpoint,
@@ -15,10 +21,12 @@ import {
   normalizeOpenAICompatibleBaseUrl,
   WATER_REMINDER_INTERVAL_OPTIONS,
   type AiConfigurationUpdate,
+  type AiModelExplorerSettings,
   type PreferencesAiSettings,
   type PreferencesSettingsPatch,
 } from '../shared/settings';
 import { personalityService } from '../personality';
+import { AIModelExplorer } from './components/AIModelExplorer';
 import { usePreferencesSettings } from './hooks/usePreferencesSettings';
 
 interface PreferenceRowProps {
@@ -112,8 +120,11 @@ export function PreferencesApp() {
   const [apiKeyClearRequested, setApiKeyClearRequested] =
     useState(false);
   const apiKeyInputRef = useRef<HTMLInputElement>(null);
+  const modelExplorerPreferencesRef = useRef<AiModelExplorerSettings>(
+    settings.aiModelExplorer,
+  );
   const [availableModels, setAvailableModels] = useState<
-    readonly { readonly id: string; readonly displayName?: string }[]
+    readonly ModelExplorerSource[]
   >([]);
   const [connectionStatus, setConnectionStatus] =
     useState<ConnectionStatus>(INITIAL_CONNECTION_STATUS);
@@ -142,6 +153,10 @@ export function PreferencesApp() {
   const save = (patch: PreferencesSettingsPatch): void => {
     void update(patch);
   };
+
+  useEffect(() => {
+    modelExplorerPreferencesRef.current = settings.aiModelExplorer;
+  }, [settings.aiModelExplorer]);
 
   useEffect(() => {
     if (aiDirty) {
@@ -202,6 +217,42 @@ export function PreferencesApp() {
     if (invalidateConnection) {
       invalidateAiConnection();
     }
+  };
+
+  const persistModelExplorerPreferences = (
+    nextPreferences: AiModelExplorerSettings,
+  ): void => {
+    modelExplorerPreferencesRef.current = nextPreferences;
+    save({ aiModelExplorer: nextPreferences });
+  };
+
+  const handleToggleFavoriteModel = (modelId: string): void => {
+    if (aiDraft.provider === '') {
+      return;
+    }
+
+    const reference = createModelReference(aiDraft.provider, modelId);
+    persistModelExplorerPreferences(
+      toggleFavoriteModel(
+        modelExplorerPreferencesRef.current,
+        reference,
+      ),
+    );
+  };
+
+  const handleSelectModel = (modelId: string): void => {
+    if (aiDraft.provider === '') {
+      return;
+    }
+
+    const reference = createModelReference(aiDraft.provider, modelId);
+    updateAiDraft({ model: reference.modelId }, false);
+    persistModelExplorerPreferences(
+      recordRecentModel(
+        modelExplorerPreferencesRef.current,
+        reference,
+      ),
+    );
   };
 
   const handleApiKeyChange = (): void => {
@@ -438,6 +489,10 @@ export function PreferencesApp() {
     connectionStatus.phase === 'error'
       ? connectionStatus.diagnostics
       : undefined;
+  const modelDiscoveryUnavailable =
+    modelLoadingStatus.phase === 'empty' ||
+    modelLoadingStatus.phase === 'error' ||
+    connectionStatus.phase === 'error';
 
   const handleWaterIntervalChange = (
     event: ChangeEvent<HTMLSelectElement>,
@@ -840,41 +895,28 @@ export function PreferencesApp() {
         <PreferenceRow
           htmlFor="ai-model"
           label="Model"
-          description={
-            aiDraft.provider === 'custom'
-              ? 'Enter a model ID or choose one after loading models.'
-              : 'Models are loaded from the selected provider after a successful connection test.'
-          }
+          description="Browse discovered models or enter an ID when discovery is unavailable."
           control={
-            aiDraft.provider === 'custom' ? (
-              modelLoadingStatus.phase === 'loaded' &&
-              availableModels.length > 0 ? (
-                <select
-                  className="settings-select settings-select--model"
-                  id="ai-model"
-                  value={aiDraft.model}
-                  disabled={settingsAreLoading || aiActionInProgress}
-                  onChange={(event) => {
-                    updateAiDraft(
-                      { model: event.currentTarget.value },
-                      false,
-                    );
-                  }}
-                >
-                  {!availableModels.some(
-                    (model) => model.id === aiDraft.model,
-                  ) && aiDraft.model.trim().length > 0 ? (
-                    <option value={aiDraft.model}>
-                      {aiDraft.model} (manual)
-                    </option>
-                  ) : null}
-                  {availableModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.displayName ?? model.id}
-                    </option>
-                  ))}
-                </select>
-              ) : (
+            aiDraft.provider !== '' &&
+            modelLoadingStatus.phase === 'loaded' &&
+            availableModels.length > 0 ? (
+              <AIModelExplorer
+                models={availableModels}
+                provider={aiDraft.provider}
+                selectedModelId={aiDraft.model}
+                preferences={settings.aiModelExplorer}
+                disabled={settingsAreLoading || aiActionInProgress}
+                onSelect={handleSelectModel}
+                onToggleFavorite={handleToggleFavoriteModel}
+              />
+            ) : aiDraft.provider === 'custom' ||
+              modelDiscoveryUnavailable ? (
+              <div className="model-manual-entry">
+                {modelDiscoveryUnavailable ? (
+                  <p id="ai-model-fallback-message">
+                    Couldn&apos;t load models. Enter a model ID manually.
+                  </p>
+                ) : null}
                 <input
                   className="settings-input settings-select--model"
                   id="ai-model"
@@ -884,6 +926,11 @@ export function PreferencesApp() {
                   disabled={settingsAreLoading || aiActionInProgress}
                   autoComplete="off"
                   spellCheck={false}
+                  aria-describedby={
+                    modelDiscoveryUnavailable
+                      ? 'ai-model-fallback-message'
+                      : undefined
+                  }
                   onChange={(event) => {
                     updateAiDraft(
                       { model: event.currentTarget.value },
@@ -891,38 +938,29 @@ export function PreferencesApp() {
                     );
                   }}
                 />
-              )
+              </div>
             ) : (
-              <select
-                className="settings-select settings-select--model"
+              <button
+                className="model-explorer-trigger"
                 id="ai-model"
-                value={aiDraft.model}
+                type="button"
                 disabled={
                   settingsAreLoading ||
                   aiActionInProgress ||
-                  modelLoadingStatus.phase !== 'loaded' ||
-                  availableModels.length === 0
+                  aiDraft.provider === ''
                 }
-                onChange={(event) => {
-                  updateAiDraft(
-                    { model: event.currentTarget.value },
-                    false,
-                  );
-                }}
               >
-                {modelLoadingStatus.phase === 'loading' ? (
-                  <option value="">Loading models...</option>
-                ) : modelLoadingStatus.phase === 'empty' ? (
-                  <option value="">No models available</option>
-                ) : modelLoadingStatus.phase === 'loaded' ? null : (
-                  <option value="">Load models first</option>
-                )}
-                {availableModels.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.displayName ?? model.id}
-                  </option>
-                ))}
-              </select>
+                <span className="model-explorer-trigger__label">
+                  {modelLoadingStatus.phase === 'loading'
+                    ? 'Loading models…'
+                    : aiDraft.provider === ''
+                      ? 'Select a provider first'
+                      : 'Load models first'}
+                </span>
+                <span className="model-explorer-trigger__action">
+                  Browse models
+                </span>
+              </button>
             )
           }
         />

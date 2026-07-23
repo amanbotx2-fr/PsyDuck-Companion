@@ -35,6 +35,7 @@ const ROOT_KEYS = [
   'general',
   'water',
   'ai',
+  'aiModelExplorer',
   'credential',
 ] as const;
 const REQUIRED_ROOT_KEYS = ['general', 'water', 'ai'] as const;
@@ -103,6 +104,14 @@ const serializeSettings = (
       : { baseUrl: settings.ai.baseUrl }),
     ...(legacyApiKey === null ? {} : { apiKey: legacyApiKey }),
   },
+  aiModelExplorer: {
+    favorites: settings.aiModelExplorer.favorites.map((reference) => ({
+      ...reference,
+    })),
+    recent: settings.aiModelExplorer.recent.map((reference) => ({
+      ...reference,
+    })),
+  },
   credential: protectedCredential,
 });
 
@@ -146,6 +155,9 @@ const parseSettingsDocument = (
     general: value.general,
     water: value.water,
     ai: aiPatch,
+    ...(value.aiModelExplorer === undefined
+      ? {}
+      : { aiModelExplorer: value.aiModelExplorer }),
   });
 
   if (patch === null) {
