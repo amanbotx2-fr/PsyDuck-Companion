@@ -10,6 +10,10 @@ import {
   type WaterReminderInterval,
 } from '../shared/settings';
 import { APP_NAME } from '../shared/constants';
+import {
+  POMODORO_DURATION_OPTIONS,
+  type PomodoroState,
+} from '../shared/pomodoro';
 
 export interface ApplicationMenuActions {
   readonly showCompanion: () => void;
@@ -17,6 +21,13 @@ export interface ApplicationMenuActions {
   readonly restart: () => void;
   readonly quit: () => void;
   readonly updateSettings: (patch: SettingsPatch) => void;
+  readonly getPomodoroState: () => PomodoroState;
+  readonly startPomodoro: () => void;
+  readonly pausePomodoro: () => void;
+  readonly resumePomodoro: () => void;
+  readonly stopPomodoro: () => void;
+  readonly setPomodoroDuration: (durationMinutes: number) => void;
+  readonly selectCustomPomodoroDuration: () => Promise<void>;
 }
 
 const createIntervalMenu = (
@@ -32,11 +43,71 @@ const createIntervalMenu = (
     },
   }));
 
+const createPomodoroMenu = (
+  actions: ApplicationMenuActions,
+): MenuItemConstructorOptions => {
+  const state = actions.getPomodoroState();
+  const presetDurations = new Set<number>(POMODORO_DURATION_OPTIONS);
+
+  return {
+    label: 'Pomodoro',
+    submenu: [
+      {
+        label: 'Start Focus Session',
+        enabled: !state.running,
+        click: actions.startPomodoro,
+      },
+      {
+        label: 'Pause',
+        enabled: state.running && !state.paused,
+        click: actions.pausePomodoro,
+      },
+      {
+        label: 'Resume',
+        enabled: state.running && state.paused,
+        click: actions.resumePomodoro,
+      },
+      {
+        label: 'Stop',
+        enabled: state.running,
+        click: actions.stopPomodoro,
+      },
+      { type: 'separator' },
+      {
+        label: 'Duration',
+        submenu: [
+          ...POMODORO_DURATION_OPTIONS.map((durationMinutes) => ({
+            label: `${durationMinutes} Minutes`,
+            type: 'radio' as const,
+            checked:
+              state.selectedDurationMinutes === durationMinutes,
+            click: () => {
+              actions.setPomodoroDuration(durationMinutes);
+            },
+          })),
+          {
+            label: 'Custom…',
+            type: 'radio',
+            checked: !presetDurations.has(
+              state.selectedDurationMinutes,
+            ),
+            click: () => {
+              void actions.selectCustomPomodoroDuration();
+            },
+          },
+        ],
+      },
+    ],
+  };
+};
+
 export const createCompanionContextMenu = (
   settings: AppSettings,
   actions: ApplicationMenuActions,
 ): Menu =>
   Menu.buildFromTemplate([
+    createPomodoroMenu(actions),
+    { type: 'separator' },
     {
       label: '💧 Water Reminders',
       submenu: [

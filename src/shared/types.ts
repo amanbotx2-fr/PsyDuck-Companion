@@ -1,5 +1,10 @@
 import type { AIModel, AIResponse } from '../ai/AIProvider';
 import type {
+  PomodoroCompletionListener,
+  PomodoroState,
+  PomodoroStateListener,
+} from './pomodoro';
+import type {
   AiConfigurationUpdate,
   PreferencesSettings,
   PreferencesSettingsPatch,
@@ -54,6 +59,13 @@ export interface CompanionBridge {
   readonly showCompanionContextMenu: () => void;
   readonly getRuntimeSettings: () => Promise<RuntimeSettings>;
   readonly askAI: (prompt: string) => Promise<AIAskResult>;
+  readonly getPomodoroState: () => PomodoroState | null;
+  readonly onPomodoroStateChanged: (
+    listener: PomodoroStateListener,
+  ) => () => void;
+  readonly onPomodoroCompleted: (
+    listener: PomodoroCompletionListener,
+  ) => () => void;
   readonly onRuntimeSettingsChanged: (
     listener: RuntimeSettingsChangeListener,
   ) => () => void;

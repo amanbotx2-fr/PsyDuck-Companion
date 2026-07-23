@@ -11,4 +11,6 @@ export const IPC_CHANNELS = {
   askAI: 'ai:ask',
   listAIModels: 'ai:list-models',
   testAIConnection: 'ai:test-connection',
+  pomodoroStateChanged: 'pomodoro:state-changed',
+  pomodoroCompleted: 'pomodoro:completed',
 } as const;

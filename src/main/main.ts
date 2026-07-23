@@ -23,6 +23,7 @@ import {
 } from '../ai/providers/ollama/OllamaEndpointPolicy';
 import { personalityService } from '../personality';
 import { IPC_CHANNELS } from '../shared/events';
+import type { PomodoroState } from '../shared/pomodoro';
 import {
   type AiProviderSelection,
   parseAiConfigurationUpdate,
@@ -58,16 +59,25 @@ import {
   IpcAuthorizer,
   type RendererRole,
 } from './ipcAuthorization';
+import {
+  FilePomodoroPersistence,
+  PomodoroManager,
+} from './PomodoroManager';
+import { requestCustomPomodoroDuration } from './pomodoroDurationDialog';
 import { createPreferencesWindow } from './preferencesWindow';
 import { getExpectedRendererUrl } from './rendererSecurity';
 import { SettingsService } from './SettingsService';
 import { createSystemTray } from './tray';
-import { createMainWindow } from './window';
+import {
+  createMainWindow,
+  setPomodoroWidgetSpace,
+} from './window';
 
 const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
 const MAX_AI_PROMPT_LENGTH = 4_096;
 const SETTINGS_FILE_NAME = 'settings.json';
+const POMODORO_FILE_NAME = 'pomodoro.json';
 const API_KEY_PROVIDERS: ReadonlySet<AiProviderSelection> = new Set([
   'openai',
   'gemini',
@@ -81,7 +91,11 @@ let preferencesWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let aiService: AIService | null = null;
+let pomodoroManager: PomodoroManager | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
+let unsubscribeFromPomodoroState: (() => void) | null = null;
+let unsubscribeFromPomodoroCompletion: (() => void) | null = null;
+let pendingPomodoroCompletion = false;
 
 const ipcAuthorizer = new IpcAuthorizer({
   getTarget: (role) => {
@@ -112,6 +126,14 @@ const getAIService = (): AIService => {
   }
 
   return aiService;
+};
+
+const getPomodoroManager = (): PomodoroManager => {
+  if (pomodoroManager === null) {
+    throw new Error('Pomodoro manager is not initialized.');
+  }
+
+  return pomodoroManager;
 };
 
 const createAIService = (): AIService =>
@@ -240,6 +262,77 @@ const bindAIRequestLifecycle = (
   });
 };
 
+const sendPomodoroState = (
+  targetWindow: BrowserWindow,
+  state: PomodoroState,
+): void => {
+  if (
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed()
+  ) {
+    return;
+  }
+
+  targetWindow.webContents.send(
+    IPC_CHANNELS.pomodoroStateChanged,
+    state,
+  );
+};
+
+const sendPendingPomodoroCompletion = (
+  targetWindow: BrowserWindow,
+): void => {
+  if (
+    !pendingPomodoroCompletion ||
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed()
+  ) {
+    return;
+  }
+
+  pendingPomodoroCompletion = false;
+  targetWindow.webContents.send(IPC_CHANNELS.pomodoroCompleted);
+};
+
+const synchronizePomodoroRenderer = (
+  targetWindow: BrowserWindow,
+): void => {
+  const state = getPomodoroManager().getState();
+  setPomodoroWidgetSpace(targetWindow, state.running);
+  sendPomodoroState(targetWindow, state);
+  sendPendingPomodoroCompletion(targetWindow);
+};
+
+const handlePomodoroStateChange = (state: PomodoroState): void => {
+  const targetWindow = mainWindow;
+
+  if (targetWindow === null || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  setPomodoroWidgetSpace(targetWindow, state.running);
+
+  if (!targetWindow.webContents.isLoadingMainFrame()) {
+    sendPomodoroState(targetWindow, state);
+  }
+};
+
+const handlePomodoroCompletion = (): void => {
+  const targetWindow = mainWindow;
+
+  if (
+    targetWindow === null ||
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed() ||
+    targetWindow.webContents.isLoadingMainFrame()
+  ) {
+    pendingPomodoroCompletion = true;
+    return;
+  }
+
+  targetWindow.webContents.send(IPC_CHANNELS.pomodoroCompleted);
+};
+
 const openMainWindow = (): BrowserWindow => {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     return mainWindow;
@@ -247,10 +340,17 @@ const openMainWindow = (): BrowserWindow => {
 
   const alwaysOnTop =
     getSettingsService().get().general.alwaysOnTop;
-  const nextMainWindow = createMainWindow(alwaysOnTop);
+  const pomodoroState = getPomodoroManager().getState();
+  const nextMainWindow = createMainWindow(
+    alwaysOnTop,
+    pomodoroState.running,
+  );
   mainWindow = nextMainWindow;
   bindAIRequestLifecycle(nextMainWindow, 'companion');
   startCursorBroadcast(nextMainWindow);
+  nextMainWindow.webContents.on('did-finish-load', () => {
+    synchronizePomodoroRenderer(nextMainWindow);
+  });
 
   nextMainWindow.once('closed', () => {
     if (mainWindow === nextMainWindow) {
@@ -290,6 +390,7 @@ const openPreferences = (): void => {
 
 const restartApplication = (): void => {
   aiRequestManager.cancelAll('application_quit');
+  pomodoroManager?.dispose();
   app.relaunch();
   app.exit(0);
 };
@@ -304,12 +405,40 @@ const updateSettings = (patch: SettingsPatch): void => {
   });
 };
 
+const selectCustomPomodoroDuration = async (): Promise<void> => {
+  const manager = getPomodoroManager();
+  const duration = await requestCustomPomodoroDuration(
+    manager.getState().selectedDurationMinutes,
+  );
+
+  if (duration !== null) {
+    manager.setDuration(duration);
+  }
+};
+
 const getMenuActions = (): ApplicationMenuActions => ({
   showCompanion: showMainWindow,
   openPreferences,
   restart: restartApplication,
   quit: quitApplication,
   updateSettings,
+  getPomodoroState: () => getPomodoroManager().getState(),
+  startPomodoro: () => {
+    getPomodoroManager().start();
+  },
+  pausePomodoro: () => {
+    getPomodoroManager().pause();
+  },
+  resumePomodoro: () => {
+    getPomodoroManager().resume();
+  },
+  stopPomodoro: () => {
+    getPomodoroManager().stop();
+  },
+  setPomodoroDuration: (durationMinutes) => {
+    getPomodoroManager().setDuration(durationMinutes);
+  },
+  selectCustomPomodoroDuration,
 });
 
 const handleShowCompanionContextMenu = (
@@ -706,6 +835,19 @@ void app.whenReady().then(async () => {
   }
 
   aiService = createAIService();
+  pomodoroManager = new PomodoroManager({
+    persistence: new FilePomodoroPersistence(
+      join(app.getPath('userData'), POMODORO_FILE_NAME),
+    ),
+  });
+  unsubscribeFromPomodoroState = pomodoroManager.subscribe(
+    handlePomodoroStateChange,
+  );
+  unsubscribeFromPomodoroCompletion = pomodoroManager.onComplete(
+    handlePomodoroCompletion,
+  );
+
+  await pomodoroManager.load();
 
   try {
     await synchronizeAISettings(settingsService.get());
@@ -736,6 +878,12 @@ app.once('before-quit', () => {
   aiRequestManager.cancelAll('application_quit');
   unsubscribeFromSettings?.();
   unsubscribeFromSettings = null;
+  unsubscribeFromPomodoroState?.();
+  unsubscribeFromPomodoroState = null;
+  unsubscribeFromPomodoroCompletion?.();
+  unsubscribeFromPomodoroCompletion = null;
+  pomodoroManager?.dispose();
+  pomodoroManager = null;
   const activeAIService = aiService;
   aiService = null;
   void activeAIService?.dispose().catch((error: unknown) => {

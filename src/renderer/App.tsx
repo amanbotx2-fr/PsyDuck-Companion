@@ -7,6 +7,7 @@ import {
 } from '../engine/BehaviorEngine';
 import { WaterReminder } from '../engine/WaterReminder';
 import { personalityService } from '../personality';
+import { POMODORO_COMPLETION_MESSAGE } from '../shared/pomodoro';
 import {
   PsyDuck,
   type PsyDuckAnimationController,
@@ -15,6 +16,7 @@ import {
   ChatInputBubble,
   type ChatInputDismissReason,
 } from './components/ChatInputBubble';
+import { PomodoroWidget } from './components/PomodoroWidget';
 import { SpeechBubble } from './components/SpeechBubble';
 import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
@@ -31,6 +33,8 @@ const MINIMUM_BLINK_INTERVAL_MS = 4_000;
 const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
 const MINIMUM_THINKING_DURATION_MS = 350;
 const AI_RESPONSE_DURATION_MS = 5_000;
+const POMODORO_COMPLETION_DURATION_MS = 5_000;
+const POMODORO_CELEBRATION_DURATION_MS = 900;
 const SETTINGS_MANAGED_REMINDER_STORAGE = {
   getItem: () => null,
   setItem: () => undefined,
@@ -67,10 +71,15 @@ export function App() {
   const responseDelayTimerRef = useRef<ReturnType<
     typeof globalThis.setTimeout
   > | null>(null);
+  const celebrationTimerRef = useRef<ReturnType<
+    typeof globalThis.setTimeout
+  > | null>(null);
+  const pendingPomodoroCompletionRef = useRef(false);
   const mountedRef = useRef(true);
   const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
     INITIAL_AI_INTERACTION_STATE,
   );
+  const [celebrating, setCelebrating] = useState(false);
   const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
 
@@ -240,6 +249,13 @@ export function App() {
     ],
   );
 
+  const showPomodoroCompletion = useCallback((): void => {
+    pendingPomodoroCompletionRef.current = false;
+    speechBubble.show(POMODORO_COMPLETION_MESSAGE, {
+      duration: POMODORO_COMPLETION_DURATION_MS,
+    });
+  }, [speechBubble.show]);
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -250,8 +266,48 @@ export function App() {
         globalThis.clearTimeout(responseDelayTimerRef.current);
         responseDelayTimerRef.current = null;
       }
+
+      if (celebrationTimerRef.current !== null) {
+        globalThis.clearTimeout(celebrationTimerRef.current);
+        celebrationTimerRef.current = null;
+      }
     };
   }, []);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onPomodoroCompleted(() => {
+      if (celebrationTimerRef.current !== null) {
+        globalThis.clearTimeout(celebrationTimerRef.current);
+      }
+
+      setCelebrating(true);
+      celebrationTimerRef.current = globalThis.setTimeout(() => {
+        celebrationTimerRef.current = null;
+        setCelebrating(false);
+      }, POMODORO_CELEBRATION_DURATION_MS);
+
+      if (aiInteractionRef.current.phase === 'idle') {
+        showPomodoroCompletion();
+      } else {
+        pendingPomodoroCompletionRef.current = true;
+      }
+    });
+  }, [showPomodoroCompletion]);
+
+  useEffect(() => {
+    if (
+      aiInteraction.phase === 'idle' &&
+      pendingPomodoroCompletionRef.current
+    ) {
+      showPomodoroCompletion();
+    }
+  }, [aiInteraction.phase, showPomodoroCompletion]);
 
   useEffect(() => {
     if (
@@ -443,12 +499,18 @@ export function App() {
         onCancel={handleChatInputCancel}
         onSubmit={handleChatInputSubmit}
       />
-      <PsyDuck
-        activationEnabled={aiInteraction.phase === 'idle'}
-        eyeTrackingEnabled={settings.general.eyeTracking}
-        onActivate={handlePsyDuckActivate}
-        onAnimationControllerChange={handleAnimationControllerChange}
-      />
+      <PomodoroWidget />
+      <div
+        className="psyduck-anchor"
+        data-celebrating={celebrating}
+      >
+        <PsyDuck
+          activationEnabled={aiInteraction.phase === 'idle'}
+          eyeTrackingEnabled={settings.general.eyeTracking}
+          onActivate={handlePsyDuckActivate}
+          onAnimationControllerChange={handleAnimationControllerChange}
+        />
+      </div>
     </main>
   );
 }
