@@ -8,6 +8,7 @@ import {
 import { WaterReminder } from '../engine/WaterReminder';
 import { personalityService } from '../personality';
 import { POMODORO_COMPLETION_MESSAGE } from '../shared/pomodoro';
+import { DEFAULT_USER_NAME } from '../shared/settings';
 import {
   PsyDuck,
   type PsyDuckAnimationController,
@@ -16,8 +17,22 @@ import {
   ChatInputBubble,
   type ChatInputDismissReason,
 } from './components/ChatInputBubble';
+import {
+  COMPANION_WIDGET_IDS,
+  CompanionWidget,
+  CompanionWidgetStack,
+} from './components/CompanionWidgetStack';
+import {
+  PomodoroDurationPanel,
+  type PomodoroDurationPanelDismissReason,
+} from './components/PomodoroDurationPanel';
 import { PomodoroWidget } from './components/PomodoroWidget';
 import { SpeechBubble } from './components/SpeechBubble';
+import {
+  UserNamePanel,
+  type UserNamePanelDismissReason,
+} from './components/UserNamePanel';
+import { usePomodoroState } from './hooks/usePomodoroState';
 import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
 
@@ -80,6 +95,20 @@ export function App() {
     INITIAL_AI_INTERACTION_STATE,
   );
   const [celebrating, setCelebrating] = useState(false);
+  const [customPomodoroPanelOpen, setCustomPomodoroPanelOpen] =
+    useState(false);
+  const [customPomodoroPanelPresent, setCustomPomodoroPanelPresent] =
+    useState(false);
+  const [
+    customPomodoroPanelRequestSequence,
+    setCustomPomodoroPanelRequestSequence,
+  ] = useState(0);
+  const [userNamePanelOpen, setUserNamePanelOpen] = useState(false);
+  const [userNamePanelPresent, setUserNamePanelPresent] =
+    useState(false);
+  const [userNamePanelRequestSequence, setUserNamePanelRequestSequence] =
+    useState(0);
+  const pomodoroState = usePomodoroState();
   const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
 
@@ -256,6 +285,62 @@ export function App() {
     });
   }, [speechBubble.show]);
 
+  const handleCustomPomodoroPanelDismiss = useCallback(
+    (_reason: PomodoroDurationPanelDismissReason): void => {
+      setCustomPomodoroPanelOpen(false);
+    },
+    [],
+  );
+
+  const handleCustomPomodoroStart = useCallback(
+    async (durationMinutes: number): Promise<void> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      await bridge.startPomodoro(durationMinutes);
+      setCustomPomodoroPanelOpen(false);
+    },
+    [],
+  );
+
+  const handleCustomPomodoroPanelAfterClose = useCallback((): void => {
+    setCustomPomodoroPanelPresent(false);
+    window.psyduck?.notifyCustomPomodoroPanelClosed();
+  }, []);
+
+  const handleUserNamePanelDismiss = useCallback(
+    (_reason: UserNamePanelDismissReason): void => {
+      setUserNamePanelOpen(false);
+    },
+    [],
+  );
+
+  const handleUserNameSave = useCallback(
+    async (name: string): Promise<void> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      const savedName = await bridge.updateUserName(name);
+      setUserNamePanelOpen(false);
+      speechBubble.show(`Nice to meet you, ${savedName}!`);
+    },
+    [speechBubble.show],
+  );
+
+  const handleUserNamePanelAfterClose = useCallback((): void => {
+    setUserNamePanelPresent(false);
+  }, []);
+
+  const handleContentHeightChange = useCallback((height: number): void => {
+    window.psyduck?.setCompanionContentHeight(height);
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -299,6 +384,36 @@ export function App() {
       }
     });
   }, [showPomodoroCompletion]);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onCustomPomodoroDurationRequested(() => {
+      setCustomPomodoroPanelRequestSequence(
+        (sequence) => sequence + 1,
+      );
+      setCustomPomodoroPanelPresent(true);
+      setCustomPomodoroPanelOpen(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onUserNamePanelRequested(() => {
+      setUserNamePanelRequestSequence((sequence) => sequence + 1);
+      setUserNamePanelPresent(true);
+      setUserNamePanelOpen(true);
+    });
+  }, []);
 
   useEffect(() => {
     if (
@@ -481,36 +596,90 @@ export function App() {
     };
   }, [speechBubble.clearQueue, speechBubble.hide, speechBubble.show]);
 
+  const aiWidgetVisible =
+    aiInteraction.phase === 'input-open' ||
+    speechBubble.currentMessage !== null;
+
+  const psyDuckAnchor = (
+    <div
+      className="psyduck-anchor"
+      data-celebrating={celebrating}
+    >
+      <PsyDuck
+        activationEnabled={aiInteraction.phase === 'idle'}
+        eyeTrackingEnabled={settings.general.eyeTracking}
+        onActivate={handlePsyDuckActivate}
+        onAnimationControllerChange={handleAnimationControllerChange}
+      />
+    </div>
+  );
+
   return (
     <main
       className="app-shell"
       data-ai-state={aiInteraction.phase}
+      data-pomodoro-running={pomodoroState.running}
+      data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
+      data-user-name-panel-open={userNamePanelOpen}
       aria-label="PsyDuck desktop companion"
     >
-      {aiInteraction.phase === 'input-open' ? null : (
-        <SpeechBubble
-          message={speechBubble.currentMessage}
-          visibility={speechBubble.visibility}
-          onExitTransitionEnd={speechBubble.notifyExitTransitionEnd}
-        />
-      )}
-      <ChatInputBubble
-        open={aiInteraction.phase === 'input-open'}
-        onCancel={handleChatInputCancel}
-        onSubmit={handleChatInputSubmit}
-      />
-      <PomodoroWidget />
-      <div
-        className="psyduck-anchor"
-        data-celebrating={celebrating}
+      <CompanionWidgetStack
+        anchor={psyDuckAnchor}
+        onContentHeightChange={handleContentHeightChange}
       >
-        <PsyDuck
-          activationEnabled={aiInteraction.phase === 'idle'}
-          eyeTrackingEnabled={settings.general.eyeTracking}
-          onActivate={handlePsyDuckActivate}
-          onAnimationControllerChange={handleAnimationControllerChange}
-        />
-      </div>
+        {userNamePanelPresent ? (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.userNamePanel}>
+            <UserNamePanel
+              key={userNamePanelRequestSequence}
+              open={userNamePanelOpen}
+              defaultName={settings.userName ?? DEFAULT_USER_NAME}
+              onDismiss={handleUserNamePanelDismiss}
+              onSave={handleUserNameSave}
+              onAfterClose={handleUserNamePanelAfterClose}
+            />
+          </CompanionWidget>
+        ) : null}
+        {customPomodoroPanelPresent ? (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.pomodoroPanel}>
+            <PomodoroDurationPanel
+              key={customPomodoroPanelRequestSequence}
+              open={customPomodoroPanelOpen}
+              defaultDurationMinutes={
+                pomodoroState.selectedDurationMinutes
+              }
+              onDismiss={handleCustomPomodoroPanelDismiss}
+              onStart={handleCustomPomodoroStart}
+              onAfterClose={handleCustomPomodoroPanelAfterClose}
+            />
+          </CompanionWidget>
+        ) : null}
+        {aiWidgetVisible ? (
+          <CompanionWidget
+            id={COMPANION_WIDGET_IDS.ai}
+            className="companion-widget--ai"
+          >
+            {aiInteraction.phase === 'input-open' ? null : (
+              <SpeechBubble
+                message={speechBubble.currentMessage}
+                visibility={speechBubble.visibility}
+                onExitTransitionEnd={
+                  speechBubble.notifyExitTransitionEnd
+                }
+              />
+            )}
+            <ChatInputBubble
+              open={aiInteraction.phase === 'input-open'}
+              onCancel={handleChatInputCancel}
+              onSubmit={handleChatInputSubmit}
+            />
+          </CompanionWidget>
+        ) : null}
+        {pomodoroState.running ? (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.pomodoro}>
+            <PomodoroWidget state={pomodoroState} />
+          </CompanionWidget>
+        ) : null}
+      </CompanionWidgetStack>
     </main>
   );
 }

@@ -5,6 +5,8 @@ import {
   clonePomodoroState,
   createIdlePomodoroState,
   isPomodoroDuration,
+  MAXIMUM_POMODORO_DURATION_MINUTES,
+  MINIMUM_POMODORO_DURATION_MINUTES,
   type PomodoroCompletionListener,
   type PomodoroState,
   type PomodoroStateListener,
@@ -12,6 +14,10 @@ import {
 
 const POMODORO_DOCUMENT_VERSION = 1;
 const SECOND_MS = 1_000;
+const INVALID_DURATION_MESSAGE =
+  `Pomodoro duration must be between ` +
+  `${MINIMUM_POMODORO_DURATION_MINUTES} and ` +
+  `${MAXIMUM_POMODORO_DURATION_MINUTES} minutes.`;
 
 export interface PersistedPomodoroDocument {
   readonly version: typeof POMODORO_DOCUMENT_VERSION;
@@ -227,9 +233,7 @@ export class PomodoroManager {
     this.assertReady();
 
     if (!isPomodoroDuration(durationMinutes)) {
-      throw new RangeError(
-        'Pomodoro duration must be between 1 and 240 minutes.',
-      );
+      throw new RangeError(INVALID_DURATION_MESSAGE);
     }
 
     this.clearTick();
@@ -305,9 +309,7 @@ export class PomodoroManager {
     this.assertReady();
 
     if (!isPomodoroDuration(durationMinutes)) {
-      throw new RangeError(
-        'Pomodoro duration must be between 1 and 240 minutes.',
-      );
+      throw new RangeError(INVALID_DURATION_MESSAGE);
     }
 
     const currentState = this.getState();

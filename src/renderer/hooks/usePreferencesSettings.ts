@@ -54,6 +54,7 @@ export function usePreferencesSettings(): PreferencesSettingsController {
 
         setSettings((currentSettings) => ({
           ...currentSettings,
+          userName: runtimeSettings.userName,
           general: { ...runtimeSettings.general },
           water: { ...runtimeSettings.water },
         }));

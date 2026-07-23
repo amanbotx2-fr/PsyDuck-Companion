@@ -22,12 +22,12 @@ export interface ApplicationMenuActions {
   readonly quit: () => void;
   readonly updateSettings: (patch: SettingsPatch) => void;
   readonly getPomodoroState: () => PomodoroState;
-  readonly startPomodoro: () => void;
+  readonly startPomodoro: (durationMinutes: number) => void;
   readonly pausePomodoro: () => void;
   readonly resumePomodoro: () => void;
   readonly stopPomodoro: () => void;
-  readonly setPomodoroDuration: (durationMinutes: number) => void;
-  readonly selectCustomPomodoroDuration: () => Promise<void>;
+  readonly requestCustomPomodoroDuration: () => void;
+  readonly requestUserName: () => void;
 }
 
 const createIntervalMenu = (
@@ -52,11 +52,22 @@ const createPomodoroMenu = (
   return {
     label: 'Pomodoro',
     submenu: [
+      ...POMODORO_DURATION_OPTIONS.map((durationMinutes) => ({
+        label: `${durationMinutes} min`,
+        type: 'radio' as const,
+        checked: state.selectedDurationMinutes === durationMinutes,
+        click: () => {
+          actions.startPomodoro(durationMinutes);
+        },
+      })),
+      { type: 'separator' as const },
       {
-        label: 'Start Focus Session',
-        enabled: !state.running,
-        click: actions.startPomodoro,
+        label: 'Custom…',
+        type: 'radio',
+        checked: !presetDurations.has(state.selectedDurationMinutes),
+        click: actions.requestCustomPomodoroDuration,
       },
+      { type: 'separator' },
       {
         label: 'Pause',
         enabled: state.running && !state.paused,
@@ -72,31 +83,6 @@ const createPomodoroMenu = (
         enabled: state.running,
         click: actions.stopPomodoro,
       },
-      { type: 'separator' },
-      {
-        label: 'Duration',
-        submenu: [
-          ...POMODORO_DURATION_OPTIONS.map((durationMinutes) => ({
-            label: `${durationMinutes} Minutes`,
-            type: 'radio' as const,
-            checked:
-              state.selectedDurationMinutes === durationMinutes,
-            click: () => {
-              actions.setPomodoroDuration(durationMinutes);
-            },
-          })),
-          {
-            label: 'Custom…',
-            type: 'radio',
-            checked: !presetDurations.has(
-              state.selectedDurationMinutes,
-            ),
-            click: () => {
-              void actions.selectCustomPomodoroDuration();
-            },
-          },
-        ],
-      },
     ],
   };
 };
@@ -107,6 +93,36 @@ export const createCompanionContextMenu = (
 ): Menu =>
   Menu.buildFromTemplate([
     createPomodoroMenu(actions),
+    { type: 'separator' },
+    {
+      label: 'Personal Assistant',
+      submenu: [
+        {
+          label: 'Set My Name…',
+          click: actions.requestUserName,
+        },
+        { type: 'separator' },
+        {
+          label: 'Reminders',
+          submenu: [
+            {
+              label: 'Coming Soon',
+              enabled: false,
+            },
+          ],
+        },
+        { type: 'separator' },
+        {
+          label: 'Sticky Message',
+          submenu: [
+            {
+              label: 'Coming Soon',
+              enabled: false,
+            },
+          ],
+        },
+      ],
+    },
     { type: 'separator' },
     {
       label: '💧 Water Reminders',

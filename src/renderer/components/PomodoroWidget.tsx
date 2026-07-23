@@ -1,8 +1,13 @@
-import { formatPomodoroTime } from '../../shared/pomodoro';
-import { usePomodoroState } from '../hooks/usePomodoroState';
+import {
+  formatPomodoroTime,
+  type PomodoroState,
+} from '../../shared/pomodoro';
 
-export function PomodoroWidget() {
-  const state = usePomodoroState();
+export interface PomodoroWidgetProps {
+  readonly state: PomodoroState;
+}
+
+export function PomodoroWidget({ state }: PomodoroWidgetProps) {
 
   if (!state.running) {
     return null;

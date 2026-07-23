@@ -54,7 +54,8 @@ export function ChatInputBubble({
       if (
         (target instanceof Node && bubbleRef.current?.contains(target)) ||
         (target instanceof Element &&
-          target.closest('.psyduck-stage') !== null)
+          (target.closest('.psyduck-stage') !== null ||
+            target.closest('.floating-companion-panel') !== null))
       ) {
         return;
       }

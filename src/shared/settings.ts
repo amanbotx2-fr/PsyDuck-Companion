@@ -1,3 +1,9 @@
+import {
+  cloneReminder,
+  parseStoredReminders,
+  type Reminder,
+} from './reminders';
+
 export const WATER_REMINDER_INTERVAL_OPTIONS = [
   15,
   30,
@@ -33,6 +39,21 @@ export type AiProvider = (typeof AI_PROVIDER_OPTIONS)[number]['id'];
 export type AiProviderSelection = AiProvider | '';
 
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
+export const DEFAULT_USER_NAME = 'Friend';
+export const MAXIMUM_USER_NAME_LENGTH = 30;
+
+export const normalizeUserName = (value: unknown): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  return normalizedValue.length > 0 &&
+    normalizedValue.length <= MAXIMUM_USER_NAME_LENGTH
+    ? normalizedValue
+    : null;
+};
 
 export const isAiProvider = (value: unknown): value is AiProvider =>
   typeof value === 'string' &&
@@ -74,12 +95,15 @@ export interface AiSettings {
 }
 
 export interface AppSettings {
+  readonly userName: string;
+  readonly reminders: readonly Reminder[];
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
   readonly ai: AiSettings;
 }
 
 export interface RuntimeSettings {
+  readonly userName: string;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
 }
@@ -94,6 +118,7 @@ export interface PreferencesAiSettings {
 
 // This DTO is restricted to the Preferences window. Credentials are redacted.
 export interface PreferencesSettings {
+  readonly userName: string;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
   readonly ai: PreferencesAiSettings;
@@ -118,6 +143,8 @@ export interface AiSettingsPatch {
 }
 
 export interface SettingsPatch {
+  readonly userName?: string;
+  readonly reminders?: readonly Reminder[];
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
   readonly ai?: AiSettingsPatch;
@@ -135,6 +162,8 @@ export interface AiConfigurationUpdate extends AiSettingsPatch {
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
+  userName: DEFAULT_USER_NAME,
+  reminders: [],
   general: {
     alwaysOnTop: true,
     launchAtStartup: false,
@@ -173,7 +202,13 @@ const AI_PATCH_KEYS = [
   'endpoint',
 ] as const;
 const AI_CONFIGURATION_KEYS = [...AI_PATCH_KEYS, 'apiKey'] as const;
-const ROOT_SETTING_KEYS = ['general', 'water', 'ai'] as const;
+const ROOT_SETTING_KEYS = [
+  'userName',
+  'reminders',
+  'general',
+  'water',
+  'ai',
+] as const;
 const MAXIMUM_MODEL_LENGTH = 256;
 const MAXIMUM_API_KEY_LENGTH = 4_096;
 const MAXIMUM_ENDPOINT_LENGTH = 2_048;
@@ -286,12 +321,28 @@ export const parseSettingsPatch = (
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
   const ai = value.ai === undefined ? undefined : parseAiPatch(value.ai);
+  const userName =
+    value.userName === undefined
+      ? undefined
+      : normalizeUserName(value.userName);
+  const reminders =
+    value.reminders === undefined
+      ? undefined
+      : parseStoredReminders(value.reminders);
 
-  if (general === null || water === null || ai === null) {
+  if (
+    general === null ||
+    water === null ||
+    ai === null ||
+    userName === null ||
+    reminders === null
+  ) {
     return null;
   }
 
   return {
+    ...(userName === undefined ? {} : { userName }),
+    ...(reminders === undefined ? {} : { reminders }),
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
     ...(ai === undefined ? {} : { ai }),
@@ -352,6 +403,8 @@ export const mergeSettings = (
   settings: AppSettings,
   patch: SettingsPatch,
 ): AppSettings => ({
+  userName: patch.userName ?? settings.userName,
+  reminders: (patch.reminders ?? settings.reminders).map(cloneReminder),
   general: {
     ...settings.general,
     ...patch.general,
@@ -373,8 +426,9 @@ export const cloneSettings = (settings: AppSettings): AppSettings =>
   mergeSettings(settings, {});
 
 export const toRuntimeSettings = (
-  settings: Pick<AppSettings, 'general' | 'water'>,
+  settings: Pick<AppSettings, 'userName' | 'general' | 'water'>,
 ): RuntimeSettings => ({
+  userName: settings.userName,
   general: { ...settings.general },
   water: { ...settings.water },
 });
@@ -402,6 +456,7 @@ export const mergePreferencesSettings = (
   settings: PreferencesSettings,
   patch: PreferencesSettingsPatch,
 ): PreferencesSettings => ({
+  userName: settings.userName,
   general: {
     ...settings.general,
     ...patch.general,
@@ -418,6 +473,8 @@ export const parseSettings = (value: unknown): AppSettings | null => {
     !isRecord(value) ||
     !hasOnlyKeys(value, ROOT_SETTING_KEYS) ||
     !hasEveryKey(value, ROOT_SETTING_KEYS) ||
+    normalizeUserName(value.userName) === null ||
+    parseStoredReminders(value.reminders) === null ||
     !isRecord(value.general) ||
     !isRecord(value.water) ||
     !isRecord(value.ai) ||
@@ -434,6 +491,8 @@ export const parseSettings = (value: unknown): AppSettings | null => {
 
   const { apiKeyConfigured, ...aiPatchValue } = value.ai;
   const patch = parseSettingsPatch({
+    userName: value.userName,
+    reminders: value.reminders,
     general: value.general,
     water: value.water,
     ai: aiPatchValue,

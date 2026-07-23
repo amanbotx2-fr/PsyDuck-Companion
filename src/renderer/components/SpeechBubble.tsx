@@ -18,18 +18,7 @@ export interface SpeechBubbleProps {
   readonly onExitTransitionEnd: () => void;
 }
 
-const SCREEN_EDGE_PADDING_PX = 8;
-const BUBBLE_TOP_PX = 8;
-const TAIL_EDGE_INSET_PX = 18;
 const OVERFLOW_TOLERANCE_PX = 1;
-
-interface MultiMonitorScreen extends Screen {
-  readonly availLeft?: number;
-  readonly availTop?: number;
-}
-
-const clamp = (value: number, minimum: number, maximum: number): number =>
-  Math.min(Math.max(value, minimum), maximum);
 
 export function SpeechBubble({
   message,
@@ -48,107 +37,23 @@ export function SpeechBubble({
   const isOverflowing = overflowingMessageId === messageId;
   const isExpanded = isOverflowing && expandedMessageId === messageId;
 
-  const updateLayout = useCallback((): void => {
-    const bubbleElement = bubbleRef.current;
+  const updateOverflow = useCallback((): void => {
     const messageElement = messageRef.current;
 
-    if (bubbleElement === null || messageElement === null || messageId === null) {
+    if (messageElement === null || messageId === null || isExpanded) {
       return;
     }
 
-    if (!isExpanded) {
-      const overflows =
-        messageElement.scrollHeight - messageElement.clientHeight >
-        OVERFLOW_TOLERANCE_PX;
+    const overflows =
+      messageElement.scrollHeight - messageElement.clientHeight >
+      OVERFLOW_TOLERANCE_PX;
 
-      setOverflowingMessageId((currentMessageId) => {
-        const nextMessageId = overflows ? messageId : null;
-        return currentMessageId === nextMessageId
-          ? currentMessageId
-          : nextMessageId;
-      });
-    }
-
-    const bubbleWidth = bubbleElement.offsetWidth;
-    const bubbleHeight = bubbleElement.offsetHeight;
-    const anchorX = window.innerWidth / 2;
-    const desiredLeft = anchorX - bubbleWidth / 2;
-    const desiredTop = BUBBLE_TOP_PX;
-    const browserScreen = window.screen as MultiMonitorScreen;
-    const screenAvailableLeft = browserScreen.availLeft ?? 0;
-    const screenAvailableTop = browserScreen.availTop ?? 0;
-    const availableLeft =
-      screenAvailableLeft - window.screenX + SCREEN_EDGE_PADDING_PX;
-    const availableRight =
-      screenAvailableLeft +
-      browserScreen.availWidth -
-      window.screenX -
-      SCREEN_EDGE_PADDING_PX;
-    const availableTop =
-      screenAvailableTop - window.screenY + SCREEN_EDGE_PADDING_PX;
-    const availableBottom =
-      screenAvailableTop +
-      browserScreen.availHeight -
-      window.screenY -
-      SCREEN_EDGE_PADDING_PX;
-    const safeLeft = Math.max(SCREEN_EDGE_PADDING_PX, availableLeft);
-    const safeRight = Math.min(
-      window.innerWidth - SCREEN_EDGE_PADDING_PX,
-      availableRight,
-    );
-    const safeTop = Math.max(SCREEN_EDGE_PADDING_PX, availableTop);
-    const safeBottom = Math.min(
-      window.innerHeight - SCREEN_EDGE_PADDING_PX,
-      availableBottom,
-    );
-    const maximumLeft = safeRight - bubbleWidth;
-    const maximumTop = safeBottom - bubbleHeight;
-    const viewportMaximumLeft = Math.max(
-      SCREEN_EDGE_PADDING_PX,
-      window.innerWidth - SCREEN_EDGE_PADDING_PX - bubbleWidth,
-    );
-    const viewportMaximumTop = Math.max(
-      SCREEN_EDGE_PADDING_PX,
-      window.innerHeight - SCREEN_EDGE_PADDING_PX - bubbleHeight,
-    );
-    const clampedLeft =
-      maximumLeft >= safeLeft
-        ? clamp(desiredLeft, safeLeft, maximumLeft)
-        : clamp(
-            desiredLeft,
-            SCREEN_EDGE_PADDING_PX,
-            viewportMaximumLeft,
-          );
-    const clampedTop =
-      maximumTop >= safeTop
-        ? clamp(desiredTop, safeTop, maximumTop)
-        : clamp(
-            desiredTop,
-            SCREEN_EDGE_PADDING_PX,
-            viewportMaximumTop,
-          );
-    const maximumTailX = Math.max(
-      TAIL_EDGE_INSET_PX,
-      bubbleWidth - TAIL_EDGE_INSET_PX,
-    );
-    const tailX = clamp(
-      anchorX - clampedLeft,
-      TAIL_EDGE_INSET_PX,
-      maximumTailX,
-    );
-
-    bubbleElement.style.setProperty(
-      '--speech-bubble-offset-x',
-      `${clampedLeft - desiredLeft}px`,
-    );
-    bubbleElement.style.setProperty(
-      '--speech-bubble-offset-y',
-      `${clampedTop - desiredTop}px`,
-    );
-    bubbleElement.style.setProperty(
-      '--speech-bubble-tail-x',
-      `${tailX}px`,
-    );
+    setOverflowingMessageId((currentMessageId) => {
+      const nextMessageId = overflows ? messageId : null;
+      return currentMessageId === nextMessageId
+        ? currentMessageId
+        : nextMessageId;
+    });
   }, [isExpanded, messageId]);
 
   useLayoutEffect(() => {
@@ -164,7 +69,7 @@ export function SpeechBubble({
 
       animationFrameId = requestAnimationFrame(() => {
         animationFrameId = null;
-        updateLayout();
+        updateOverflow();
       });
     };
     const resizeObserver = new ResizeObserver(scheduleLayoutUpdate);
@@ -179,10 +84,7 @@ export function SpeechBubble({
       resizeObserver.observe(messageElement);
     }
 
-    window.addEventListener('resize', scheduleLayoutUpdate);
-    window.addEventListener('pointermove', scheduleLayoutUpdate);
-    window.visualViewport?.addEventListener('resize', scheduleLayoutUpdate);
-    updateLayout();
+    updateOverflow();
 
     return () => {
       if (animationFrameId !== null) {
@@ -190,14 +92,8 @@ export function SpeechBubble({
       }
 
       resizeObserver.disconnect();
-      window.removeEventListener('resize', scheduleLayoutUpdate);
-      window.removeEventListener('pointermove', scheduleLayoutUpdate);
-      window.visualViewport?.removeEventListener(
-        'resize',
-        scheduleLayoutUpdate,
-      );
     };
-  }, [messageId, updateLayout]);
+  }, [messageId, updateOverflow]);
 
   if (message === null) {
     return null;

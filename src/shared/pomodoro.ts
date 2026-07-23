@@ -1,7 +1,7 @@
-export const POMODORO_DURATION_OPTIONS = [15, 25, 45, 60] as const;
+export const POMODORO_DURATION_OPTIONS = [25, 50, 90] as const;
 export const DEFAULT_POMODORO_DURATION_MINUTES = 25;
 export const MINIMUM_POMODORO_DURATION_MINUTES = 1;
-export const MAXIMUM_POMODORO_DURATION_MINUTES = 240;
+export const MAXIMUM_POMODORO_DURATION_MINUTES = 720;
 export const POMODORO_COMPLETION_MESSAGE =
   '🎉 Focus Complete!\n\nTake a short break.';
 
@@ -19,6 +19,7 @@ export interface PomodoroState {
 
 export type PomodoroStateListener = (state: PomodoroState) => void;
 export type PomodoroCompletionListener = () => void;
+export type PomodoroCustomDurationRequestListener = () => void;
 
 export const isPomodoroDuration = (value: unknown): value is number =>
   typeof value === 'number' &&

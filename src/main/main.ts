@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   ipcMain,
   Menu,
+  powerMonitor,
   safeStorage,
   screen,
   type IpcMainEvent,
@@ -23,9 +24,13 @@ import {
 } from '../ai/providers/ollama/OllamaEndpointPolicy';
 import { personalityService } from '../personality';
 import { IPC_CHANNELS } from '../shared/events';
-import type { PomodoroState } from '../shared/pomodoro';
+import {
+  isPomodoroDuration,
+  type PomodoroState,
+} from '../shared/pomodoro';
 import {
   type AiProviderSelection,
+  normalizeUserName,
   parseAiConfigurationUpdate,
   parsePreferencesSettingsPatch,
   toPreferencesSettings,
@@ -63,18 +68,20 @@ import {
   FilePomodoroPersistence,
   PomodoroManager,
 } from './PomodoroManager';
-import { requestCustomPomodoroDuration } from './pomodoroDurationDialog';
 import { createPreferencesWindow } from './preferencesWindow';
+import { ReminderScheduler } from './ReminderScheduler';
+import { ReminderService } from './ReminderService';
 import { getExpectedRendererUrl } from './rendererSecurity';
 import { SettingsService } from './SettingsService';
 import { createSystemTray } from './tray';
 import {
   createMainWindow,
-  setPomodoroWidgetSpace,
+  setCompanionContentHeight,
 } from './window';
 
 const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
+const MAX_COMPANION_CONTENT_HEIGHT = 10_000;
 const MAX_AI_PROMPT_LENGTH = 4_096;
 const SETTINGS_FILE_NAME = 'settings.json';
 const POMODORO_FILE_NAME = 'pomodoro.json';
@@ -92,10 +99,13 @@ let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let aiService: AIService | null = null;
 let pomodoroManager: PomodoroManager | null = null;
+let reminderScheduler: ReminderScheduler | null = null;
+let reminderService: ReminderService | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
 let unsubscribeFromPomodoroState: (() => void) | null = null;
 let unsubscribeFromPomodoroCompletion: (() => void) | null = null;
 let pendingPomodoroCompletion = false;
+let customPomodoroPanelVisible = false;
 
 const ipcAuthorizer = new IpcAuthorizer({
   getTarget: (role) => {
@@ -134,6 +144,18 @@ const getPomodoroManager = (): PomodoroManager => {
   }
 
   return pomodoroManager;
+};
+
+const getReminderService = (): ReminderService => {
+  if (reminderService === null) {
+    throw new Error('Reminder service is not initialized.');
+  }
+
+  return reminderService;
+};
+
+const handleSystemResume = (): void => {
+  void reminderScheduler?.resynchronize();
 };
 
 const createAIService = (): AIService =>
@@ -298,9 +320,14 @@ const synchronizePomodoroRenderer = (
   targetWindow: BrowserWindow,
 ): void => {
   const state = getPomodoroManager().getState();
-  setPomodoroWidgetSpace(targetWindow, state.running);
   sendPomodoroState(targetWindow, state);
   sendPendingPomodoroCompletion(targetWindow);
+
+  if (customPomodoroPanelVisible) {
+    targetWindow.webContents.send(
+      IPC_CHANNELS.customPomodoroDurationRequested,
+    );
+  }
 };
 
 const handlePomodoroStateChange = (state: PomodoroState): void => {
@@ -309,8 +336,6 @@ const handlePomodoroStateChange = (state: PomodoroState): void => {
   if (targetWindow === null || targetWindow.isDestroyed()) {
     return;
   }
-
-  setPomodoroWidgetSpace(targetWindow, state.running);
 
   if (!targetWindow.webContents.isLoadingMainFrame()) {
     sendPomodoroState(targetWindow, state);
@@ -340,14 +365,26 @@ const openMainWindow = (): BrowserWindow => {
 
   const alwaysOnTop =
     getSettingsService().get().general.alwaysOnTop;
-  const pomodoroState = getPomodoroManager().getState();
-  const nextMainWindow = createMainWindow(
-    alwaysOnTop,
-    pomodoroState.running,
-  );
+  const nextMainWindow = createMainWindow(alwaysOnTop);
   mainWindow = nextMainWindow;
   bindAIRequestLifecycle(nextMainWindow, 'companion');
   startCursorBroadcast(nextMainWindow);
+  const resetCustomPanelSurface = (): void => {
+    if (!customPomodoroPanelVisible || nextMainWindow.isDestroyed()) {
+      return;
+    }
+
+    customPomodoroPanelVisible = false;
+  };
+  nextMainWindow.webContents.on('did-start-navigation', (details) => {
+    if (details.isMainFrame && !details.isSameDocument) {
+      resetCustomPanelSurface();
+    }
+  });
+  nextMainWindow.webContents.on(
+    'render-process-gone',
+    resetCustomPanelSurface,
+  );
   nextMainWindow.webContents.on('did-finish-load', () => {
     synchronizePomodoroRenderer(nextMainWindow);
   });
@@ -355,6 +392,7 @@ const openMainWindow = (): BrowserWindow => {
   nextMainWindow.once('closed', () => {
     if (mainWindow === nextMainWindow) {
       mainWindow = null;
+      customPomodoroPanelVisible = false;
     }
   });
 
@@ -405,14 +443,39 @@ const updateSettings = (patch: SettingsPatch): void => {
   });
 };
 
-const selectCustomPomodoroDuration = async (): Promise<void> => {
-  const manager = getPomodoroManager();
-  const duration = await requestCustomPomodoroDuration(
-    manager.getState().selectedDurationMinutes,
-  );
+const requestCustomPomodoroDuration = (): void => {
+  const targetWindow = openMainWindow();
+  customPomodoroPanelVisible = true;
+  targetWindow.show();
+  targetWindow.focus();
 
-  if (duration !== null) {
-    manager.setDuration(duration);
+  if (!targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.send(
+      IPC_CHANNELS.customPomodoroDurationRequested,
+    );
+  }
+};
+
+const requestUserName = (): void => {
+  const targetWindow = openMainWindow();
+  targetWindow.show();
+  targetWindow.focus();
+
+  const sendRequest = (): void => {
+    if (
+      targetWindow.isDestroyed() ||
+      targetWindow.webContents.isDestroyed()
+    ) {
+      return;
+    }
+
+    targetWindow.webContents.send(IPC_CHANNELS.userNamePanelRequested);
+  };
+
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.once('did-finish-load', sendRequest);
+  } else {
+    sendRequest();
   }
 };
 
@@ -423,8 +486,8 @@ const getMenuActions = (): ApplicationMenuActions => ({
   quit: quitApplication,
   updateSettings,
   getPomodoroState: () => getPomodoroManager().getState(),
-  startPomodoro: () => {
-    getPomodoroManager().start();
+  startPomodoro: (durationMinutes) => {
+    getPomodoroManager().start(durationMinutes);
   },
   pausePomodoro: () => {
     getPomodoroManager().pause();
@@ -435,10 +498,8 @@ const getMenuActions = (): ApplicationMenuActions => ({
   stopPomodoro: () => {
     getPomodoroManager().stop();
   },
-  setPomodoroDuration: (durationMinutes) => {
-    getPomodoroManager().setDuration(durationMinutes);
-  },
-  selectCustomPomodoroDuration,
+  requestCustomPomodoroDuration,
+  requestUserName,
 });
 
 const handleShowCompanionContextMenu = (
@@ -494,6 +555,92 @@ const handleGetRuntimeSettings = (
   _event: IpcMainInvokeEvent,
 ): RuntimeSettings => {
   return toRuntimeSettings(getSettingsService().get());
+};
+
+const handleUpdateUserName = async (
+  _event: IpcMainInvokeEvent,
+  value: unknown,
+): Promise<string> => {
+  const userName = normalizeUserName(value);
+
+  if (userName === null) {
+    throw new TypeError('Invalid user name.');
+  }
+
+  const settings = await getSettingsService().update({ userName });
+  return settings.userName;
+};
+
+const handleCreateReminder = (
+  _event: IpcMainInvokeEvent,
+  value: unknown,
+) => getReminderService().createReminder(value);
+
+const handleUpdateReminder = (
+  _event: IpcMainInvokeEvent,
+  id: unknown,
+  value: unknown,
+) => getReminderService().updateReminder(id, value);
+
+const handleDeleteReminder = (
+  _event: IpcMainInvokeEvent,
+  id: unknown,
+) => getReminderService().deleteReminder(id);
+
+const handleGetReminder = (
+  _event: IpcMainInvokeEvent,
+  id: unknown,
+) => getReminderService().getReminder(id);
+
+const handleListReminders = (_event: IpcMainInvokeEvent) =>
+  getReminderService().listReminders();
+
+const handleMarkReminderCompleted = (
+  _event: IpcMainInvokeEvent,
+  id: unknown,
+) => getReminderService().markCompleted(id);
+
+const handleSetCompanionContentHeight = (
+  event: IpcMainEvent,
+  value: unknown,
+): void => {
+  if (
+    typeof value !== 'number' ||
+    !Number.isFinite(value) ||
+    value <= 0 ||
+    value > MAX_COMPANION_CONTENT_HEIGHT
+  ) {
+    return;
+  }
+
+  const targetWindow = BrowserWindow.fromWebContents(event.sender);
+
+  if (targetWindow === null || targetWindow.isDestroyed()) {
+    return;
+  }
+
+  setCompanionContentHeight(targetWindow, value);
+};
+
+const handleStartPomodoro = (
+  _event: IpcMainInvokeEvent,
+  value: unknown,
+): void => {
+  if (!isPomodoroDuration(value)) {
+    throw new TypeError('Invalid Pomodoro duration.');
+  }
+
+  getPomodoroManager().start(value);
+};
+
+const handleCustomPomodoroPanelClosed = (
+  _event: IpcMainEvent,
+): void => {
+  customPomodoroPanelVisible = false;
+
+  if (mainWindow === null || mainWindow.isDestroyed()) {
+    return;
+  }
 };
 
 const handleGetPreferencesSettings = (
@@ -727,10 +874,19 @@ const authorizedMoveWindowHandler = ipcAuthorizer.protectEvent(
   IPC_CHANNELS.moveWindow,
   handleMoveWindow,
 );
+const authorizedContentHeightHandler = ipcAuthorizer.protectEvent(
+  IPC_CHANNELS.setCompanionContentHeight,
+  handleSetCompanionContentHeight,
+);
 const authorizedContextMenuHandler = ipcAuthorizer.protectEvent(
   IPC_CHANNELS.showCompanionContextMenu,
   handleShowCompanionContextMenu,
 );
+const authorizedCustomPomodoroPanelClosedHandler =
+  ipcAuthorizer.protectEvent(
+    IPC_CHANNELS.customPomodoroPanelClosed,
+    handleCustomPomodoroPanelClosed,
+  );
 
 const registerIpcHandlers = (): void => {
   ipcMain.handle(
@@ -745,6 +901,62 @@ const registerIpcHandlers = (): void => {
     ipcAuthorizer.protectInvoke(
       IPC_CHANNELS.getRuntimeSettings,
       handleGetRuntimeSettings,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.updateUserName,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.updateUserName,
+      handleUpdateUserName,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.startPomodoro,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.startPomodoro,
+      handleStartPomodoro,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.createReminder,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.createReminder,
+      handleCreateReminder,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.updateReminder,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.updateReminder,
+      handleUpdateReminder,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.deleteReminder,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.deleteReminder,
+      handleDeleteReminder,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.getReminder,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getReminder,
+      handleGetReminder,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.listReminders,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.listReminders,
+      handleListReminders,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.markReminderCompleted,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.markReminderCompleted,
+      handleMarkReminderCompleted,
     ),
   );
   ipcMain.handle(
@@ -788,14 +1000,30 @@ const registerIpcHandlers = (): void => {
   );
   ipcMain.on(IPC_CHANNELS.moveWindow, authorizedMoveWindowHandler);
   ipcMain.on(
+    IPC_CHANNELS.setCompanionContentHeight,
+    authorizedContentHeightHandler,
+  );
+  ipcMain.on(
     IPC_CHANNELS.showCompanionContextMenu,
     authorizedContextMenuHandler,
+  );
+  ipcMain.on(
+    IPC_CHANNELS.customPomodoroPanelClosed,
+    authorizedCustomPomodoroPanelClosedHandler,
   );
 };
 
 const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.getCursorPosition);
   ipcMain.removeHandler(IPC_CHANNELS.getRuntimeSettings);
+  ipcMain.removeHandler(IPC_CHANNELS.updateUserName);
+  ipcMain.removeHandler(IPC_CHANNELS.startPomodoro);
+  ipcMain.removeHandler(IPC_CHANNELS.createReminder);
+  ipcMain.removeHandler(IPC_CHANNELS.updateReminder);
+  ipcMain.removeHandler(IPC_CHANNELS.deleteReminder);
+  ipcMain.removeHandler(IPC_CHANNELS.getReminder);
+  ipcMain.removeHandler(IPC_CHANNELS.listReminders);
+  ipcMain.removeHandler(IPC_CHANNELS.markReminderCompleted);
   ipcMain.removeHandler(IPC_CHANNELS.getPreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updatePreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updateAiConfiguration);
@@ -807,8 +1035,16 @@ const unregisterIpcHandlers = (): void => {
     authorizedMoveWindowHandler,
   );
   ipcMain.removeListener(
+    IPC_CHANNELS.setCompanionContentHeight,
+    authorizedContentHeightHandler,
+  );
+  ipcMain.removeListener(
     IPC_CHANNELS.showCompanionContextMenu,
     authorizedContextMenuHandler,
+  );
+  ipcMain.removeListener(
+    IPC_CHANNELS.customPomodoroPanelClosed,
+    authorizedCustomPomodoroPanelClosedHandler,
   );
 };
 
@@ -834,6 +1070,10 @@ void app.whenReady().then(async () => {
     console.error('[settings] load_failed', error);
   }
 
+  reminderService = new ReminderService(settingsService);
+  reminderScheduler = new ReminderScheduler(reminderService);
+  powerMonitor.on('resume', handleSystemResume);
+  await reminderScheduler.start();
   aiService = createAIService();
   pomodoroManager = new PomodoroManager({
     persistence: new FilePomodoroPersistence(
@@ -875,6 +1115,9 @@ void app.whenReady().then(async () => {
 
 app.once('before-quit', () => {
   app.removeListener('activate', showMainWindow);
+  powerMonitor.removeListener('resume', handleSystemResume);
+  reminderScheduler?.stop();
+  reminderScheduler = null;
   aiRequestManager.cancelAll('application_quit');
   unsubscribeFromSettings?.();
   unsubscribeFromSettings = null;
@@ -884,6 +1127,7 @@ app.once('before-quit', () => {
   unsubscribeFromPomodoroCompletion = null;
   pomodoroManager?.dispose();
   pomodoroManager = null;
+  reminderService = null;
   const activeAIService = aiService;
   aiService = null;
   void activeAIService?.dispose().catch((error: unknown) => {

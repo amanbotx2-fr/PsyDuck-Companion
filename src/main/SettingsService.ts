@@ -27,7 +27,14 @@ interface ParsedSettingsDocument {
   readonly settings: AppSettings;
 }
 
-const ROOT_KEYS = ['general', 'water', 'ai', 'credential'] as const;
+const ROOT_KEYS = [
+  'userName',
+  'reminders',
+  'general',
+  'water',
+  'ai',
+  'credential',
+] as const;
 const REQUIRED_ROOT_KEYS = ['general', 'water', 'ai'] as const;
 const GENERAL_KEYS = [
   'alwaysOnTop',
@@ -78,6 +85,8 @@ const serializeSettings = (
   protectedCredential: ProtectedCredential | null,
   legacyApiKey: string | null,
 ): Record<string, unknown> => ({
+  userName: settings.userName,
+  reminders: settings.reminders.map((reminder) => ({ ...reminder })),
   general: { ...settings.general },
   water: { ...settings.water },
   ai: {
@@ -118,6 +127,12 @@ const parseSettingsDocument = (
 
   const { apiKey, ...aiPatch } = aiConfiguration;
   const patch = parseSettingsPatch({
+    ...(value.userName === undefined
+      ? {}
+      : { userName: value.userName }),
+    ...(value.reminders === undefined
+      ? {}
+      : { reminders: value.reminders }),
     general: value.general,
     water: value.water,
     ai: aiPatch,

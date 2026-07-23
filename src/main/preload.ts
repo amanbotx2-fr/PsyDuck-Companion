@@ -3,15 +3,22 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { RuntimeSettings } from '../shared/settings';
 import type {
   PomodoroCompletionListener,
+  PomodoroCustomDurationRequestListener,
   PomodoroState,
   PomodoroStateListener,
 } from '../shared/pomodoro';
+import type {
+  CreateReminderInput,
+  Reminder,
+  UpdateReminderInput,
+} from '../shared/reminders';
 import type {
   AIAskResult,
   CompanionBridge,
   CursorPositionListener,
   RuntimeSettingsChangeListener,
   ScreenPoint,
+  UserNamePanelRequestListener,
 } from '../shared/types';
 
 // Sandboxed preload scripts cannot require local CommonJS modules. Keep the
@@ -20,19 +27,49 @@ const IPC_CHANNELS = {
   cursorPosition: 'psyduck:cursor-position',
   getCursorPosition: 'psyduck:get-cursor-position',
   moveWindow: 'psyduck:move-window',
+  setCompanionContentHeight: 'psyduck:set-content-height',
   showCompanionContextMenu: 'psyduck:show-context-menu',
   getRuntimeSettings: 'runtime-settings:get',
+  updateUserName: 'runtime-settings:update-user-name',
   runtimeSettingsChanged: 'runtime-settings:changed',
+  userNamePanelRequested: 'personal-assistant:user-name-requested',
   askAI: 'ai:ask',
+  startPomodoro: 'pomodoro:start',
+  customPomodoroPanelClosed: 'pomodoro:custom-panel-closed',
+  customPomodoroDurationRequested:
+    'pomodoro:custom-duration-requested',
   pomodoroStateChanged: 'pomodoro:state-changed',
   pomodoroCompleted: 'pomodoro:completed',
+  createReminder: 'reminders:create',
+  updateReminder: 'reminders:update',
+  deleteReminder: 'reminders:delete',
+  getReminder: 'reminders:get',
+  listReminders: 'reminders:list',
+  markReminderCompleted: 'reminders:mark-completed',
 } as const;
 
 const pomodoroStateListeners = new Set<PomodoroStateListener>();
 const pomodoroCompletionListeners =
   new Set<PomodoroCompletionListener>();
+const customPomodoroDurationRequestListeners =
+  new Set<PomodoroCustomDurationRequestListener>();
+const userNamePanelRequestListeners =
+  new Set<UserNamePanelRequestListener>();
 let latestPomodoroState: PomodoroState | null = null;
 let pendingPomodoroCompletion = false;
+let pendingCustomPomodoroDurationRequest = false;
+let pendingUserNamePanelRequest = false;
+
+ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
+  if (userNamePanelRequestListeners.size === 0) {
+    pendingUserNamePanelRequest = true;
+    return;
+  }
+
+  for (const listener of userNamePanelRequestListeners) {
+    listener();
+  }
+});
 
 ipcRenderer.on(
   IPC_CHANNELS.pomodoroStateChanged,
@@ -55,6 +92,20 @@ ipcRenderer.on(IPC_CHANNELS.pomodoroCompleted, () => {
     listener();
   }
 });
+
+ipcRenderer.on(
+  IPC_CHANNELS.customPomodoroDurationRequested,
+  () => {
+    if (customPomodoroDurationRequestListeners.size === 0) {
+      pendingCustomPomodoroDurationRequest = true;
+      return;
+    }
+
+    for (const listener of customPomodoroDurationRequestListeners) {
+      listener();
+    }
+  },
+);
 
 const companionBridge: CompanionBridge = Object.freeze({
   platform: process.platform,
@@ -80,6 +131,9 @@ const companionBridge: CompanionBridge = Object.freeze({
   moveWindow: (position: ScreenPoint) => {
     ipcRenderer.send(IPC_CHANNELS.moveWindow, position);
   },
+  setCompanionContentHeight: (height: number) => {
+    ipcRenderer.send(IPC_CHANNELS.setCompanionContentHeight, height);
+  },
   showCompanionContextMenu: () => {
     ipcRenderer.send(IPC_CHANNELS.showCompanionContextMenu);
   },
@@ -87,8 +141,54 @@ const companionBridge: CompanionBridge = Object.freeze({
     ipcRenderer.invoke(
       IPC_CHANNELS.getRuntimeSettings,
     ) as Promise<RuntimeSettings>,
+  updateUserName: (name: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.updateUserName, name) as Promise<string>,
+  onUserNamePanelRequested: (
+    listener: UserNamePanelRequestListener,
+  ) => {
+    userNamePanelRequestListeners.add(listener);
+
+    if (pendingUserNamePanelRequest) {
+      queueMicrotask(() => {
+        if (userNamePanelRequestListeners.has(listener)) {
+          pendingUserNamePanelRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      userNamePanelRequestListeners.delete(listener);
+    };
+  },
   askAI: (prompt: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.askAI, prompt) as Promise<AIAskResult>,
+  startPomodoro: (durationMinutes: number) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.startPomodoro,
+      durationMinutes,
+    ) as Promise<void>,
+  notifyCustomPomodoroPanelClosed: () => {
+    ipcRenderer.send(IPC_CHANNELS.customPomodoroPanelClosed);
+  },
+  onCustomPomodoroDurationRequested: (
+    listener: PomodoroCustomDurationRequestListener,
+  ) => {
+    customPomodoroDurationRequestListeners.add(listener);
+
+    if (pendingCustomPomodoroDurationRequest) {
+      queueMicrotask(() => {
+        if (customPomodoroDurationRequestListeners.has(listener)) {
+          pendingCustomPomodoroDurationRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      customPomodoroDurationRequestListeners.delete(listener);
+    };
+  },
   getPomodoroState: () => latestPomodoroState,
   onPomodoroStateChanged: (listener: PomodoroStateListener) => {
     pomodoroStateListeners.add(listener);
@@ -113,6 +213,36 @@ const companionBridge: CompanionBridge = Object.freeze({
       pomodoroCompletionListeners.delete(listener);
     };
   },
+  createReminder: (input: CreateReminderInput) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.createReminder,
+      input,
+    ) as Promise<Reminder>,
+  updateReminder: (id: string, input: UpdateReminderInput) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.updateReminder,
+      id,
+      input,
+    ) as Promise<Reminder>,
+  deleteReminder: (id: string) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.deleteReminder,
+      id,
+    ) as Promise<boolean>,
+  getReminder: (id: string) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.getReminder,
+      id,
+    ) as Promise<Reminder | null>,
+  listReminders: () =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.listReminders,
+    ) as Promise<readonly Reminder[]>,
+  markReminderCompleted: (id: string) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.markReminderCompleted,
+      id,
+    ) as Promise<Reminder>,
   onRuntimeSettingsChanged: (listener: RuntimeSettingsChangeListener) => {
     const handleRuntimeSettingsChanged = (
       _event: Electron.IpcRendererEvent,

@@ -5,6 +5,7 @@ const {
   PomodoroManager,
 } = require('../dist/main/PomodoroManager.js');
 const {
+  POMODORO_DURATION_OPTIONS,
   formatPomodoroTime,
   parsePomodoroDuration,
 } = require('../dist/shared/pomodoro.js');
@@ -252,26 +253,35 @@ describe('PomodoroManager', () => {
     );
     assert.equal(persistence.value.state.durationMinutes, 45);
     assert.throws(() => manager.setDuration(0), RangeError);
-    assert.throws(() => manager.start(241), RangeError);
+    assert.throws(() => manager.start(721), RangeError);
     manager.dispose();
   });
 });
 
 describe('Pomodoro formatting and validation', () => {
+  test('exposes the supported focus presets', () => {
+    assert.deepEqual([...POMODORO_DURATION_OPTIONS], [25, 50, 90]);
+  });
+
   test('formats stable minute and second values', () => {
     assert.equal(formatPomodoroTime(1_498), '24:58');
     assert.equal(formatPomodoroTime(60), '01:00');
     assert.equal(formatPomodoroTime(0), '00:00');
     assert.equal(formatPomodoroTime(14_400), '240:00');
+    assert.equal(formatPomodoroTime(43_200), '720:00');
   });
 
-  test('accepts only whole-minute values from 1 through 240', () => {
+  test('accepts only whole-minute values from 1 through 720', () => {
     assert.equal(parsePomodoroDuration(' 25 '), 25);
     assert.equal(parsePomodoroDuration('1'), 1);
     assert.equal(parsePomodoroDuration('240'), 240);
+    assert.equal(parsePomodoroDuration('720'), 720);
     assert.equal(parsePomodoroDuration('0'), null);
-    assert.equal(parsePomodoroDuration('241'), null);
+    assert.equal(parsePomodoroDuration('721'), null);
+    assert.equal(parsePomodoroDuration('-1'), null);
     assert.equal(parsePomodoroDuration('1.5'), null);
+    assert.equal(parsePomodoroDuration(''), null);
+    assert.equal(parsePomodoroDuration('NaN'), null);
     assert.equal(parsePomodoroDuration('abc'), null);
   });
 });
