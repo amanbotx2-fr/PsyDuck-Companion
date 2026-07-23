@@ -8,6 +8,7 @@ import type {
 import type {
   CreateReminderInput,
   Reminder,
+  ReminderFiredNotification,
   UpdateReminderInput,
 } from './reminders';
 import type {
@@ -28,6 +29,9 @@ export type RuntimeSettingsChangeListener = (
 ) => void;
 export type UserNamePanelRequestListener = () => void;
 export type ReminderCreationPanelRequestListener = () => void;
+export type ReminderFiredListener = (
+  notification: ReminderFiredNotification,
+) => void;
 
 export type AIAskResult =
   | {
@@ -73,6 +77,9 @@ export interface CompanionBridge {
   ) => () => void;
   readonly onReminderCreationPanelRequested: (
     listener: ReminderCreationPanelRequestListener,
+  ) => () => void;
+  readonly onReminderFired: (
+    listener: ReminderFiredListener,
   ) => () => void;
   readonly askAI: (prompt: string) => Promise<AIAskResult>;
   readonly startPomodoro: (durationMinutes: number) => Promise<void>;

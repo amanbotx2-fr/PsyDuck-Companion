@@ -1,6 +1,7 @@
 export const MAXIMUM_REMINDER_TITLE_LENGTH = 60;
 export const MAXIMUM_REMINDER_MESSAGE_LENGTH = 250;
 export const MAXIMUM_REMINDER_ID_LENGTH = 128;
+export const REMINDER_SNOOZE_DURATION_MS = 5 * 60 * 1_000;
 
 export interface Reminder {
   readonly id: string;
@@ -16,6 +17,12 @@ export interface CreateReminderInput {
   readonly title: string;
   readonly message?: string;
   readonly scheduledAt: string;
+}
+
+export interface ReminderFiredNotification {
+  readonly reminder: Reminder;
+  readonly firedAt: string;
+  readonly overdue: boolean;
 }
 
 export interface UpdateReminderInput {
@@ -138,6 +145,23 @@ export const parseIsoDateTime = (
 export const cloneReminder = (reminder: Reminder): Reminder => ({
   ...reminder,
 });
+
+export const createSnoozedReminderInput = (
+  reminder: Reminder,
+  nowTimestamp = Date.now(),
+): CreateReminderInput => {
+  if (!Number.isFinite(nowTimestamp)) {
+    throw new TypeError('Reminder snooze clock must be valid.');
+  }
+
+  return {
+    title: reminder.title,
+    message: reminder.message,
+    scheduledAt: new Date(
+      nowTimestamp + REMINDER_SNOOZE_DURATION_MS,
+    ).toISOString(),
+  };
+};
 
 export const parseStoredReminder = (value: unknown): Reminder | null => {
   if (

@@ -10,6 +10,7 @@ import type {
 import type {
   CreateReminderInput,
   Reminder,
+  ReminderFiredNotification,
   UpdateReminderInput,
 } from '../shared/reminders';
 import type {
@@ -17,6 +18,7 @@ import type {
   CompanionBridge,
   CursorPositionListener,
   ReminderCreationPanelRequestListener,
+  ReminderFiredListener,
   RuntimeSettingsChangeListener,
   ScreenPoint,
   UserNamePanelRequestListener,
@@ -36,6 +38,7 @@ const IPC_CHANNELS = {
   userNamePanelRequested: 'personal-assistant:user-name-requested',
   reminderCreationPanelRequested:
     'reminders:creation-panel-requested',
+  reminderFired: 'reminders:fired',
   askAI: 'ai:ask',
   startPomodoro: 'pomodoro:start',
   customPomodoroPanelClosed: 'pomodoro:custom-panel-closed',
@@ -60,6 +63,8 @@ const userNamePanelRequestListeners =
   new Set<UserNamePanelRequestListener>();
 const reminderCreationPanelRequestListeners =
   new Set<ReminderCreationPanelRequestListener>();
+const reminderFiredListeners = new Set<ReminderFiredListener>();
+const pendingReminderNotifications: ReminderFiredNotification[] = [];
 let latestPomodoroState: PomodoroState | null = null;
 let pendingPomodoroCompletion = false;
 let pendingCustomPomodoroDurationRequest = false;
@@ -87,6 +92,25 @@ ipcRenderer.on(IPC_CHANNELS.reminderCreationPanelRequested, () => {
     listener();
   }
 });
+
+ipcRenderer.on(
+  IPC_CHANNELS.reminderFired,
+  (_event, notification: ReminderFiredNotification) => {
+    const nextNotification = Object.freeze({
+      ...notification,
+      reminder: Object.freeze({ ...notification.reminder }),
+    });
+
+    if (reminderFiredListeners.size === 0) {
+      pendingReminderNotifications.push(nextNotification);
+      return;
+    }
+
+    for (const listener of reminderFiredListeners) {
+      listener(nextNotification);
+    }
+  },
+);
 
 ipcRenderer.on(
   IPC_CHANNELS.pomodoroStateChanged,
@@ -194,6 +218,28 @@ const companionBridge: CompanionBridge = Object.freeze({
 
     return () => {
       reminderCreationPanelRequestListeners.delete(listener);
+    };
+  },
+  onReminderFired: (listener: ReminderFiredListener) => {
+    reminderFiredListeners.add(listener);
+
+    if (pendingReminderNotifications.length > 0) {
+      queueMicrotask(() => {
+        if (!reminderFiredListeners.has(listener)) {
+          return;
+        }
+
+        const pendingNotifications =
+          pendingReminderNotifications.splice(0);
+
+        for (const notification of pendingNotifications) {
+          listener(notification);
+        }
+      });
+    }
+
+    return () => {
+      reminderFiredListeners.delete(listener);
     };
   },
   askAI: (prompt: string) =>

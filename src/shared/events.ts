@@ -10,6 +10,7 @@ export const IPC_CHANNELS = {
   userNamePanelRequested: 'personal-assistant:user-name-requested',
   reminderCreationPanelRequested:
     'reminders:creation-panel-requested',
+  reminderFired: 'reminders:fired',
   getPreferencesSettings: 'preferences-settings:get',
   updatePreferencesSettings: 'preferences-settings:update',
   updateAiConfiguration: 'preferences-ai:configure',

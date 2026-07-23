@@ -32,12 +32,14 @@ import {
   ReminderCreationPanel,
   type ReminderCreationPanelDismissReason,
 } from './components/ReminderCreationPanel';
+import { ReminderWidget } from './components/ReminderWidget';
 import { SpeechBubble } from './components/SpeechBubble';
 import {
   UserNamePanel,
   type UserNamePanelDismissReason,
 } from './components/UserNamePanel';
 import { usePomodoroState } from './hooks/usePomodoroState';
+import { useReminderNotifications } from './hooks/useReminderNotifications';
 import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
 
@@ -121,6 +123,7 @@ export function App() {
   const pomodoroState = usePomodoroState();
   const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
+  const reminderNotifications = useReminderNotifications();
 
   const transitionAIInteraction = useCallback(
     (nextState: AIInteractionState): void => {
@@ -673,6 +676,9 @@ export function App() {
       data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
       data-user-name-panel-open={userNamePanelOpen}
       data-reminder-panel-open={reminderPanelOpen}
+      data-reminder-widget-visible={
+        reminderNotifications.current !== null
+      }
       aria-label="PsyDuck desktop companion"
     >
       <CompanionWidgetStack
@@ -716,6 +722,18 @@ export function App() {
             />
           </CompanionWidget>
         ) : null}
+        {reminderNotifications.current === null ? null : (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.reminder}>
+            <ReminderWidget
+              notification={reminderNotifications.current}
+              userName={settings.userName}
+              errorMessage={reminderNotifications.errorMessage}
+              snoozing={reminderNotifications.snoozing}
+              onDismiss={reminderNotifications.dismissCurrent}
+              onSnooze={reminderNotifications.snoozeCurrent}
+            />
+          </CompanionWidget>
+        )}
         {aiWidgetVisible ? (
           <CompanionWidget
             id={COMPANION_WIDGET_IDS.ai}

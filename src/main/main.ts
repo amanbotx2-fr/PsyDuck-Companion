@@ -29,6 +29,10 @@ import {
   type PomodoroState,
 } from '../shared/pomodoro';
 import {
+  cloneReminder,
+  type ReminderFiredNotification,
+} from '../shared/reminders';
+import {
   type AiProviderSelection,
   normalizeUserName,
   parseAiConfigurationUpdate,
@@ -69,6 +73,7 @@ import {
   PomodoroManager,
 } from './PomodoroManager';
 import { createPreferencesWindow } from './preferencesWindow';
+import type { ReminderFiredEvent } from './ReminderEvents';
 import { ReminderScheduler } from './ReminderScheduler';
 import { ReminderService } from './ReminderService';
 import { getExpectedRendererUrl } from './rendererSecurity';
@@ -104,7 +109,9 @@ let reminderService: ReminderService | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
 let unsubscribeFromPomodoroState: (() => void) | null = null;
 let unsubscribeFromPomodoroCompletion: (() => void) | null = null;
+let unsubscribeFromReminderEvents: (() => void) | null = null;
 let pendingPomodoroCompletion = false;
+const pendingReminderNotifications: ReminderFiredNotification[] = [];
 let customPomodoroPanelVisible = false;
 
 const ipcAuthorizer = new IpcAuthorizer({
@@ -358,6 +365,51 @@ const handlePomodoroCompletion = (): void => {
   targetWindow.webContents.send(IPC_CHANNELS.pomodoroCompleted);
 };
 
+const flushPendingReminderNotifications = (
+  targetWindow: BrowserWindow,
+): void => {
+  if (
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed() ||
+    targetWindow.webContents.isLoadingMainFrame()
+  ) {
+    return;
+  }
+
+  while (pendingReminderNotifications.length > 0) {
+    const notification = pendingReminderNotifications[0];
+
+    if (notification === undefined) {
+      return;
+    }
+
+    try {
+      targetWindow.webContents.send(
+        IPC_CHANNELS.reminderFired,
+        notification,
+      );
+      pendingReminderNotifications.shift();
+    } catch (error) {
+      console.error('[reminders] renderer_delivery_failed', error);
+      return;
+    }
+  }
+};
+
+const handleReminderFired = (event: ReminderFiredEvent): void => {
+  pendingReminderNotifications.push({
+    reminder: cloneReminder(event.reminder),
+    firedAt: event.firedAt,
+    overdue: event.overdue,
+  });
+
+  const targetWindow = mainWindow;
+
+  if (targetWindow !== null && !targetWindow.isDestroyed()) {
+    flushPendingReminderNotifications(targetWindow);
+  }
+};
+
 const openMainWindow = (): BrowserWindow => {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     return mainWindow;
@@ -387,6 +439,7 @@ const openMainWindow = (): BrowserWindow => {
   );
   nextMainWindow.webContents.on('did-finish-load', () => {
     synchronizePomodoroRenderer(nextMainWindow);
+    flushPendingReminderNotifications(nextMainWindow);
   });
 
   nextMainWindow.once('closed', () => {
@@ -1098,6 +1151,8 @@ void app.whenReady().then(async () => {
 
   reminderService = new ReminderService(settingsService);
   reminderScheduler = new ReminderScheduler(reminderService);
+  unsubscribeFromReminderEvents =
+    reminderScheduler.subscribe(handleReminderFired);
   powerMonitor.on('resume', handleSystemResume);
   await reminderScheduler.start();
   aiService = createAIService();
@@ -1144,6 +1199,9 @@ app.once('before-quit', () => {
   powerMonitor.removeListener('resume', handleSystemResume);
   reminderScheduler?.stop();
   reminderScheduler = null;
+  unsubscribeFromReminderEvents?.();
+  unsubscribeFromReminderEvents = null;
+  pendingReminderNotifications.length = 0;
   aiRequestManager.cancelAll('application_quit');
   unsubscribeFromSettings?.();
   unsubscribeFromSettings = null;
