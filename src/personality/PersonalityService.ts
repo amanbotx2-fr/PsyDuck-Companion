@@ -4,12 +4,26 @@ import {
   type PersonalityMessageCategory,
   type PersonalityMessages,
 } from './messages';
+import {
+  PERSONALITY_EVENT_TYPE,
+  PERSONALITY_TRIGGERS,
+  PERSONALITY_TRIGGER_MESSAGE_CATEGORIES,
+  type PersonalityEventListener,
+  type PersonalitySpeechEvent,
+  type PersonalityTrigger,
+} from './PersonalityEvents';
 
 export interface PersonalityServiceOptions {
   readonly personality?: PersonalityId;
   readonly random?: () => number;
   readonly catalogs?: Readonly<Record<string, PersonalityMessages>>;
+  readonly onListenerError?: (
+    error: unknown,
+    event: PersonalitySpeechEvent,
+  ) => void;
 }
+
+const MAXIMUM_SOURCE_EVENT_ID_LENGTH = 128;
 
 const normalizeRandomValue = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -26,12 +40,22 @@ export class PersonalityService {
     PersonalityMessageCategory,
     number
   >();
+  private readonly listeners = new Set<PersonalityEventListener>();
+  private readonly processedSourceEvents = new Set<string>();
+  private readonly onListenerError:
+    | ((
+        error: unknown,
+        event: PersonalitySpeechEvent,
+      ) => void)
+    | undefined;
   private personality: PersonalityId;
+  private nextEventId = 1;
 
   public constructor(options: PersonalityServiceOptions = {}) {
     this.catalogs = options.catalogs ?? PERSONALITY_MESSAGE_CATALOGS;
     this.random = options.random ?? Math.random;
     this.personality = options.personality ?? 'default';
+    this.onListenerError = options.onListenerError;
     this.requireCatalog(this.personality);
   }
 
@@ -110,8 +134,73 @@ export class PersonalityService {
     return this.getMessage('requestComplete');
   }
 
+  public getPomodoroCompletionMessage(): string {
+    return this.getMessage('pomodoroComplete');
+  }
+
+  public getReminderCompletionMessage(): string {
+    return this.getMessage('reminderComplete');
+  }
+
+  public getStickyMessageSavedMessage(): string {
+    return this.getMessage('stickyMessageSaved');
+  }
+
   public getErrorMessage(): string {
     return this.getMessage('error');
+  }
+
+  public subscribe(listener: PersonalityEventListener): () => void {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  public emitStartupGreeting(): PersonalitySpeechEvent | null {
+    return this.emitOnce(
+      PERSONALITY_TRIGGERS.applicationStartup,
+      'current-launch',
+    );
+  }
+
+  public emitPomodoroCompletion(
+    sourceEventId: string,
+  ): PersonalitySpeechEvent | null {
+    return this.emitOnce(
+      PERSONALITY_TRIGGERS.pomodoroCompleted,
+      sourceEventId,
+    );
+  }
+
+  public emitReminderCompletion(
+    sourceEventId: string,
+  ): PersonalitySpeechEvent | null {
+    return this.emitOnce(
+      PERSONALITY_TRIGGERS.reminderCompleted,
+      sourceEventId,
+    );
+  }
+
+  public emitWaterReminderAcknowledgement(
+    sourceEventId: string,
+    selectedMessage?: string,
+  ): PersonalitySpeechEvent | null {
+    return this.emitOnce(
+      PERSONALITY_TRIGGERS.waterReminderAcknowledged,
+      sourceEventId,
+      selectedMessage,
+    );
+  }
+
+  public emitStickyMessageSaved(
+    sourceEventId: string,
+  ): PersonalitySpeechEvent | null {
+    return this.emitOnce(
+      PERSONALITY_TRIGGERS.stickyMessageSaved,
+      sourceEventId,
+    );
   }
 
   private readRandomValue(): number {
@@ -131,5 +220,63 @@ export class PersonalityService {
 
     return catalog;
   }
-}
 
+  private emitOnce(
+    trigger: PersonalityTrigger,
+    sourceEventId: string,
+    selectedMessage?: string,
+  ): PersonalitySpeechEvent | null {
+    const normalizedSourceEventId = sourceEventId.trim();
+
+    if (
+      normalizedSourceEventId.length === 0 ||
+      normalizedSourceEventId.length > MAXIMUM_SOURCE_EVENT_ID_LENGTH
+    ) {
+      throw new TypeError(
+        'Personality source event IDs must contain between 1 and 128 characters.',
+      );
+    }
+
+    const processedEventKey = `${trigger}:${normalizedSourceEventId}`;
+
+    if (this.processedSourceEvents.has(processedEventKey)) {
+      return null;
+    }
+
+    const category = PERSONALITY_TRIGGER_MESSAGE_CATEGORIES[trigger];
+    const message =
+      selectedMessage === undefined
+        ? this.getMessage(category)
+        : selectedMessage.trim();
+
+    if (
+      message.length === 0 ||
+      !this.isMessageInCategory(message, category)
+    ) {
+      throw new TypeError(
+        `Personality messages for ${trigger} must come from its configured message pool.`,
+      );
+    }
+
+    this.processedSourceEvents.add(processedEventKey);
+
+    const event = Object.freeze<PersonalitySpeechEvent>({
+      id: this.nextEventId,
+      type: PERSONALITY_EVENT_TYPE,
+      trigger,
+      sourceEventId: normalizedSourceEventId,
+      message,
+    });
+    this.nextEventId += 1;
+
+    for (const listener of this.listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.onListenerError?.(error, event);
+      }
+    }
+
+    return event;
+  }
+}

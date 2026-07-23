@@ -6,8 +6,10 @@ import {
   type BehaviorId,
 } from '../engine/BehaviorEngine';
 import { WaterReminder } from '../engine/WaterReminder';
-import { personalityService } from '../personality';
-import { POMODORO_COMPLETION_MESSAGE } from '../shared/pomodoro';
+import {
+  PERSONALITY_TRIGGERS,
+  personalityService,
+} from '../personality';
 import {
   createReminderUpdateInput,
   type ReminderManagerView,
@@ -116,7 +118,10 @@ export function App() {
   const celebrationTimerRef = useRef<ReturnType<
     typeof globalThis.setTimeout
   > | null>(null);
-  const pendingPomodoroCompletionRef = useRef(false);
+  const pendingPomodoroCompletionRef = useRef<string | null>(null);
+  const pomodoroCompletionSequenceRef = useRef(0);
+  const waterReminderSequenceRef = useRef(0);
+  const stickyMessageSaveSequenceRef = useRef(0);
   const returnToReminderManagerRef = useRef(false);
   const mountedRef = useRef(true);
   const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
@@ -356,12 +361,13 @@ export function App() {
     ],
   );
 
-  const showPomodoroCompletion = useCallback((): void => {
-    pendingPomodoroCompletionRef.current = false;
-    speechBubble.show(POMODORO_COMPLETION_MESSAGE, {
-      duration: POMODORO_COMPLETION_DURATION_MS,
-    });
-  }, [speechBubble.show]);
+  const showPomodoroCompletion = useCallback(
+    (sourceEventId: string): void => {
+      pendingPomodoroCompletionRef.current = null;
+      personalityService.emitPomodoroCompletion(sourceEventId);
+    },
+    [],
+  );
 
   const handleCustomPomodoroPanelDismiss = useCallback(
     (_reason: PomodoroDurationPanelDismissReason): void => {
@@ -432,6 +438,10 @@ export function App() {
 
       await bridge.updateStickyMessage(message);
       setStickyMessagePanelOpen(false);
+      stickyMessageSaveSequenceRef.current += 1;
+      personalityService.emitStickyMessageSaved(
+        `sticky-message-save-${stickyMessageSaveSequenceRef.current}`,
+      );
     },
     [],
   );
@@ -546,6 +556,26 @@ export function App() {
     window.psyduck?.setCompanionContentHeight(height);
   }, []);
 
+  const handleReminderDismiss = useCallback((): void => {
+    const currentNotification = reminderNotifications.current;
+
+    if (
+      currentNotification === null ||
+      reminderNotifications.snoozing
+    ) {
+      return;
+    }
+
+    reminderNotifications.dismissCurrent();
+    personalityService.emitReminderCompletion(
+      currentNotification.reminder.id,
+    );
+  }, [
+    reminderNotifications.current,
+    reminderNotifications.dismissCurrent,
+    reminderNotifications.snoozing,
+  ]);
+
   useEffect(() => {
     mountedRef.current = true;
 
@@ -570,6 +600,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const unsubscribe = personalityService.subscribe((event) => {
+      if (event.trigger === PERSONALITY_TRIGGERS.pomodoroCompleted) {
+        speechBubble.show(event.message, {
+          duration: POMODORO_COMPLETION_DURATION_MS,
+        });
+        return;
+      }
+
+      speechBubble.show(event.message);
+    });
+
+    personalityService.emitStartupGreeting();
+
+    return unsubscribe;
+  }, [speechBubble.show]);
+
+  useEffect(() => {
     const bridge = window.psyduck;
 
     if (bridge === undefined) {
@@ -577,6 +624,10 @@ export function App() {
     }
 
     return bridge.onPomodoroCompleted(() => {
+      pomodoroCompletionSequenceRef.current += 1;
+      const sourceEventId =
+        `pomodoro-completion-${pomodoroCompletionSequenceRef.current}`;
+
       if (celebrationTimerRef.current !== null) {
         globalThis.clearTimeout(celebrationTimerRef.current);
       }
@@ -588,9 +639,9 @@ export function App() {
       }, POMODORO_CELEBRATION_DURATION_MS);
 
       if (aiInteractionRef.current.phase === 'idle') {
-        showPomodoroCompletion();
+        showPomodoroCompletion(sourceEventId);
       } else {
-        pendingPomodoroCompletionRef.current = true;
+        pendingPomodoroCompletionRef.current = sourceEventId;
       }
     });
   }, [showPomodoroCompletion]);
@@ -673,11 +724,13 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    const pendingCompletionId = pendingPomodoroCompletionRef.current;
+
     if (
       aiInteraction.phase === 'idle' &&
-      pendingPomodoroCompletionRef.current
+      pendingCompletionId !== null
     ) {
-      showPomodoroCompletion();
+      showPomodoroCompletion(pendingCompletionId);
     }
   }, [aiInteraction.phase, showPomodoroCompletion]);
 
@@ -780,7 +833,14 @@ export function App() {
 
   useEffect(() => {
     const waterReminder = new WaterReminder({
-      showMessage: speechBubble.show,
+      personality: personalityService,
+      showMessage: (message) => {
+        waterReminderSequenceRef.current += 1;
+        personalityService.emitWaterReminderAcknowledgement(
+          `water-reminder-${waterReminderSequenceRef.current}`,
+          message,
+        );
+      },
       storage: SETTINGS_MANAGED_REMINDER_STORAGE,
       debug: import.meta.env.DEV,
     });
@@ -795,7 +855,7 @@ export function App() {
         waterReminderRef.current = null;
       }
     };
-  }, [speechBubble.show]);
+  }, []);
 
   useEffect(() => {
     const waterReminder = waterReminderRef.current;
@@ -964,7 +1024,7 @@ export function App() {
               userName={settings.userName}
               errorMessage={reminderNotifications.errorMessage}
               snoozing={reminderNotifications.snoozing}
-              onDismiss={reminderNotifications.dismissCurrent}
+              onDismiss={handleReminderDismiss}
               onSnooze={reminderNotifications.snoozeCurrent}
             />
           </CompanionWidget>

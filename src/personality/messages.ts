@@ -6,6 +6,9 @@ export const PERSONALITY_MESSAGE_CATEGORIES = [
   'providerFailed',
   'aiUnavailable',
   'requestComplete',
+  'pomodoroComplete',
+  'reminderComplete',
+  'stickyMessageSaved',
   'error',
 ] as const;
 
@@ -64,6 +67,24 @@ export const DEFAULT_PERSONALITY_MESSAGES = {
     'Finished.',
     'All set!',
   ],
+  pomodoroComplete: [
+    '🎉 Focus complete!\n\nTake a short break.',
+    'Focus session finished. Time to recharge.',
+    'Nice focus! Give your brain a quick break.',
+    'Timer complete. Stretch, breathe, and reset.',
+  ],
+  reminderComplete: [
+    'Reminder handled. Nice work!',
+    'All set—one less thing to remember.',
+    'That reminder is taken care of.',
+    'Done and dusted.',
+  ],
+  stickyMessageSaved: [
+    'I’ll keep that in sight.',
+    'Pinned where we can see it.',
+    'Got it—I’ll keep that nearby.',
+    'Your note is staying right here.',
+  ],
   error: [
     'Something went wrong.',
     'That did not work this time.',
@@ -77,4 +98,3 @@ export const PERSONALITY_MESSAGE_CATALOGS = {
 } as const satisfies Readonly<Record<string, PersonalityMessages>>;
 
 export type PersonalityId = keyof typeof PERSONALITY_MESSAGE_CATALOGS;
-

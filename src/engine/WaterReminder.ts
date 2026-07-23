@@ -37,6 +37,7 @@ export type WaterReminderErrorOperation =
 
 export interface WaterReminderOptions {
   readonly showMessage: (message: string) => unknown;
+  readonly personality?: PersonalityService;
   readonly storage?: WaterReminderStorage;
   readonly scheduler?: WaterReminderScheduler;
   readonly random?: () => number;
@@ -109,9 +110,11 @@ export class WaterReminder {
     this.showMessage = options.showMessage;
     this.storage = options.storage ?? getDefaultStorage();
     this.scheduler = options.scheduler ?? DEFAULT_SCHEDULER;
-    this.personality = new PersonalityService(
-      options.random === undefined ? {} : { random: options.random },
-    );
+    this.personality =
+      options.personality ??
+      new PersonalityService(
+        options.random === undefined ? {} : { random: options.random },
+      );
     this.onError = options.onError;
     this.debug = options.debug ?? false;
     this.loadPreferences();
