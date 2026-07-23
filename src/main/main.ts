@@ -14,6 +14,13 @@ import { join } from 'node:path';
 
 import { AIProviderError } from '../ai/AIProvider';
 import { AIService, AIServiceError } from '../ai/AIService';
+import {
+  AssistantActionExecutionError,
+  AssistantActionExecutor,
+  AssistantActionParseError,
+  AssistantActionResponseProcessor,
+  createAssistantActionPrompt,
+} from '../ai/actions';
 import { GeminiProvider } from '../ai/providers/GeminiProvider';
 import { GrokProvider } from '../ai/providers/GrokProvider';
 import { OllamaProvider } from '../ai/providers/OllamaProvider';
@@ -34,7 +41,6 @@ import {
 } from '../shared/reminders';
 import {
   type AiProviderSelection,
-  normalizeStickyMessage,
   normalizeUserName,
   parseAiConfigurationUpdate,
   parsePreferencesSettingsPatch,
@@ -104,6 +110,9 @@ let preferencesWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let settingsService: SettingsService | null = null;
 let aiService: AIService | null = null;
+let assistantActionResponseProcessor:
+  | AssistantActionResponseProcessor
+  | null = null;
 let pomodoroManager: PomodoroManager | null = null;
 let reminderScheduler: ReminderScheduler | null = null;
 let reminderService: ReminderService | null = null;
@@ -145,6 +154,15 @@ const getAIService = (): AIService => {
 
   return aiService;
 };
+
+const getAssistantActionResponseProcessor =
+  (): AssistantActionResponseProcessor => {
+    if (assistantActionResponseProcessor === null) {
+      throw new Error('Assistant action processor is not initialized.');
+    }
+
+    return assistantActionResponseProcessor;
+  };
 
 const getPomodoroManager = (): PomodoroManager => {
   if (pomodoroManager === null) {
@@ -706,19 +724,8 @@ const handleUpdateUserName = async (
 const handleUpdateStickyMessage = async (
   _event: IpcMainInvokeEvent,
   value: unknown,
-): Promise<string | null> => {
-  const stickyMessage =
-    value === null ? null : normalizeStickyMessage(value);
-
-  if (value !== null && stickyMessage === null) {
-    throw new TypeError('Invalid sticky message.');
-  }
-
-  const settings = await getSettingsService().update({
-    stickyMessage,
-  });
-  return settings.stickyMessage;
-};
+): Promise<string | null> =>
+  getSettingsService().updateStickyMessage(value);
 
 const handleCreateReminder = (
   _event: IpcMainInvokeEvent,
@@ -908,6 +915,17 @@ const logUnexpectedAIError = (operation: string, error: unknown): void => {
 const getAIRequestPolicyMessage = (error: unknown): string | null =>
   error instanceof AIRequestPolicyError ? error.message : null;
 
+const logAssistantActionFailure = (error: unknown): void => {
+  const code =
+    error instanceof AssistantActionParseError
+      ? error.code
+      : error instanceof AssistantActionExecutionError
+        ? 'unregistered_action'
+        : 'service_rejected';
+
+  console.warn('[ai-action] action_rejected', { code });
+};
+
 const handleAskAI = async (
   _event: IpcMainInvokeEvent,
   value: unknown,
@@ -934,8 +952,27 @@ const handleAskAI = async (
         }
 
         try {
-          const response = await getAIService().ask(prompt, { signal });
-          return { ok: true, response };
+          const response = await getAIService().ask(
+            createAssistantActionPrompt(prompt),
+            { signal },
+          );
+
+          try {
+            // Provider output is untrusted until the action parser and
+            // executor allowlist have both accepted it.
+            const processedResponse =
+              await getAssistantActionResponseProcessor().process(
+                response,
+              );
+            return { ok: true, response: processedResponse };
+          } catch (error) {
+            logAssistantActionFailure(error);
+            return {
+              ok: false,
+              message:
+                personalityService.getAssistantActionFailedMessage(),
+            };
+          }
         } catch (error) {
           logUnexpectedAIError('request', error);
           return {
@@ -1228,6 +1265,13 @@ void app.whenReady().then(async () => {
   }
 
   reminderService = new ReminderService(settingsService);
+  assistantActionResponseProcessor = new AssistantActionResponseProcessor(
+    new AssistantActionExecutor({
+      reminderService,
+      settingsService,
+      messages: personalityService,
+    }),
+  );
   reminderScheduler = new ReminderScheduler(reminderService);
   unsubscribeFromReminderEvents =
     reminderScheduler.subscribe(handleReminderFired);
@@ -1289,6 +1333,7 @@ app.once('before-quit', () => {
   unsubscribeFromPomodoroCompletion = null;
   pomodoroManager?.dispose();
   pomodoroManager = null;
+  assistantActionResponseProcessor = null;
   reminderService = null;
   const activeAIService = aiService;
   aiService = null;

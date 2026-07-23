@@ -107,6 +107,29 @@ describe('PersonalityService events', () => {
     assert.notEqual(firstReminder.message, secondReminder.message);
   });
 
+  test('provides assistant action messages from registered pools', () => {
+    const service = new PersonalityService({ random: () => 0 });
+
+    assert.equal(
+      DEFAULT_PERSONALITY_MESSAGES.reminderCreated.includes(
+        service.getReminderCreatedMessage(),
+      ),
+      true,
+    );
+    assert.equal(
+      DEFAULT_PERSONALITY_MESSAGES.stickyMessageUpdated.includes(
+        service.getStickyMessageUpdatedMessage(),
+      ),
+      true,
+    );
+    assert.equal(
+      DEFAULT_PERSONALITY_MESSAGES.assistantActionFailed.includes(
+        service.getAssistantActionFailedMessage(),
+      ),
+      true,
+    );
+  });
+
   test('isolates listener failures and supports unsubscription', () => {
     const listenerErrors = [];
     const receivedEvents = [];

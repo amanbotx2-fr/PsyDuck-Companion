@@ -142,8 +142,20 @@ export class PersonalityService {
     return this.getMessage('reminderComplete');
   }
 
+  public getReminderCreatedMessage(): string {
+    return this.getMessage('reminderCreated');
+  }
+
   public getStickyMessageSavedMessage(): string {
     return this.getMessage('stickyMessageSaved');
+  }
+
+  public getStickyMessageUpdatedMessage(): string {
+    return this.getMessage('stickyMessageUpdated');
+  }
+
+  public getAssistantActionFailedMessage(): string {
+    return this.getMessage('assistantActionFailed');
   }
 
   public getErrorMessage(): string {

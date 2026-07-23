@@ -5,6 +5,7 @@ import {
   cloneSettings,
   createDefaultSettings,
   mergeSettings,
+  normalizeStickyMessage,
   parseAiConfigurationUpdate,
   parseSettingsPatch,
   type AiConfigurationUpdate,
@@ -275,6 +276,18 @@ export class SettingsService {
       this.notifyListeners();
       return this.get();
     });
+  }
+
+  public async updateStickyMessage(value: unknown): Promise<string | null> {
+    const stickyMessage =
+      value === null ? null : normalizeStickyMessage(value);
+
+    if (value !== null && stickyMessage === null) {
+      throw new TypeError('Invalid sticky message.');
+    }
+
+    const settings = await this.update({ stickyMessage });
+    return settings.stickyMessage;
   }
 
   public updateAiConfiguration(

@@ -8,7 +8,10 @@ export const PERSONALITY_MESSAGE_CATEGORIES = [
   'requestComplete',
   'pomodoroComplete',
   'reminderComplete',
+  'reminderCreated',
   'stickyMessageSaved',
+  'stickyMessageUpdated',
+  'assistantActionFailed',
   'error',
 ] as const;
 
@@ -79,11 +82,26 @@ export const DEFAULT_PERSONALITY_MESSAGES = {
     'That reminder is taken care of.',
     'Done and dusted.',
   ],
+  reminderCreated: [
+    "I've added that reminder.",
+    "Reminder added. I'll keep track of it.",
+    "Got it—I'll remind you.",
+  ],
   stickyMessageSaved: [
     'I’ll keep that in sight.',
     'Pinned where we can see it.',
     'Got it—I’ll keep that nearby.',
     'Your note is staying right here.',
+  ],
+  stickyMessageUpdated: [
+    'Sticky note updated.',
+    'I’ll keep that note in sight.',
+    'Your sticky note is ready.',
+  ],
+  assistantActionFailed: [
+    "I couldn't complete that action.",
+    'That action did not work this time.',
+    'I could not save that yet. Check the details and try again.',
   ],
   error: [
     'Something went wrong.',

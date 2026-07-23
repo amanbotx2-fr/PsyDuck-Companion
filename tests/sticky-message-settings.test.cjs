@@ -129,9 +129,9 @@ describe('sticky message settings', () => {
         legacyDocument.general,
       );
 
-      await settingsService.update({
-        stickyMessage: 'Review the release checklist.',
-      });
+      await settingsService.updateStickyMessage(
+        '  Review the release checklist.  ',
+      );
 
       const restoredService = new SettingsService(
         filePath,
@@ -142,7 +142,11 @@ describe('sticky message settings', () => {
         'Review the release checklist.',
       );
 
-      await settingsService.update({ stickyMessage: null });
+      await assert.rejects(
+        () => settingsService.updateStickyMessage('   '),
+        /invalid sticky message/i,
+      );
+      await settingsService.updateStickyMessage(null);
       unsubscribe();
 
       const clearedService = new SettingsService(
