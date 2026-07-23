@@ -69,7 +69,7 @@ export interface AiSettings {
   readonly enabled: boolean;
   readonly provider: AiProviderSelection;
   readonly model: string;
-  readonly apiKey: string;
+  readonly apiKeyConfigured: boolean;
   readonly endpoint: string;
 }
 
@@ -77,6 +77,26 @@ export interface AppSettings {
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
   readonly ai: AiSettings;
+}
+
+export interface RuntimeSettings {
+  readonly general: GeneralSettings;
+  readonly water: WaterSettings;
+}
+
+export interface PreferencesAiSettings {
+  readonly enabled: boolean;
+  readonly provider: AiProviderSelection;
+  readonly model: string;
+  readonly apiKeyConfigured: boolean;
+  readonly endpoint: string;
+}
+
+// This DTO is restricted to the Preferences window. Credentials are redacted.
+export interface PreferencesSettings {
+  readonly general: GeneralSettings;
+  readonly water: WaterSettings;
+  readonly ai: PreferencesAiSettings;
 }
 
 export interface GeneralSettingsPatch {
@@ -94,7 +114,6 @@ export interface AiSettingsPatch {
   readonly enabled?: boolean;
   readonly provider?: AiProviderSelection;
   readonly model?: string;
-  readonly apiKey?: string;
   readonly endpoint?: string;
 }
 
@@ -102,6 +121,17 @@ export interface SettingsPatch {
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
   readonly ai?: AiSettingsPatch;
+}
+
+export interface PreferencesSettingsPatch {
+  readonly general?: GeneralSettingsPatch;
+  readonly water?: WaterSettingsPatch;
+}
+
+// Credentials may travel only from Preferences to main through the dedicated
+// configuration capability. Main never returns this object to a renderer.
+export interface AiConfigurationUpdate extends AiSettingsPatch {
+  readonly apiKey?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -118,7 +148,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     enabled: false,
     provider: '',
     model: '',
-    apiKey: '',
+    apiKeyConfigured: false,
     endpoint: DEFAULT_OLLAMA_ENDPOINT,
   },
 };
@@ -133,10 +163,16 @@ const AI_SETTING_KEYS = [
   'enabled',
   'provider',
   'model',
-  'apiKey',
+  'apiKeyConfigured',
   'endpoint',
 ] as const;
-const LEGACY_AI_SETTING_KEYS = ['enabled', 'provider', 'apiKey'] as const;
+const AI_PATCH_KEYS = [
+  'enabled',
+  'provider',
+  'model',
+  'endpoint',
+] as const;
+const AI_CONFIGURATION_KEYS = [...AI_PATCH_KEYS, 'apiKey'] as const;
 const ROOT_SETTING_KEYS = ['general', 'water', 'ai'] as const;
 const MAXIMUM_MODEL_LENGTH = 256;
 const MAXIMUM_API_KEY_LENGTH = 4_096;
@@ -209,11 +245,11 @@ const parseWaterPatch = (value: unknown): WaterSettingsPatch | null => {
 };
 
 const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
-  if (!isRecord(value) || !hasOnlyKeys(value, AI_SETTING_KEYS)) {
+  if (!isRecord(value) || !hasOnlyKeys(value, AI_PATCH_KEYS)) {
     return null;
   }
 
-  const { enabled, provider, model, apiKey, endpoint } = value;
+  const { enabled, provider, model, endpoint } = value;
 
   if (
     (enabled !== undefined && typeof enabled !== 'boolean') ||
@@ -222,9 +258,6 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
       !isAiProvider(provider)) ||
     (model !== undefined &&
       (typeof model !== 'string' || model.length > MAXIMUM_MODEL_LENGTH)) ||
-    (apiKey !== undefined &&
-      (typeof apiKey !== 'string' ||
-        apiKey.length > MAXIMUM_API_KEY_LENGTH)) ||
     (endpoint !== undefined &&
       (typeof endpoint !== 'string' ||
         endpoint.length > MAXIMUM_ENDPOINT_LENGTH ||
@@ -237,7 +270,6 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
     ...(typeof enabled === 'boolean' ? { enabled } : {}),
     ...(provider === '' || isAiProvider(provider) ? { provider } : {}),
     ...(typeof model === 'string' ? { model } : {}),
-    ...(typeof apiKey === 'string' ? { apiKey } : {}),
     ...(typeof endpoint === 'string' ? { endpoint } : {}),
   };
 };
@@ -266,6 +298,56 @@ export const parseSettingsPatch = (
   };
 };
 
+export const parsePreferencesSettingsPatch = (
+  value: unknown,
+): PreferencesSettingsPatch | null => {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['general', 'water'])
+  ) {
+    return null;
+  }
+
+  const general =
+    value.general === undefined ? undefined : parseGeneralPatch(value.general);
+  const water =
+    value.water === undefined ? undefined : parseWaterPatch(value.water);
+
+  if (general === null || water === null) {
+    return null;
+  }
+
+  return {
+    ...(general === undefined ? {} : { general }),
+    ...(water === undefined ? {} : { water }),
+  };
+};
+
+export const parseAiConfigurationUpdate = (
+  value: unknown,
+): AiConfigurationUpdate | null => {
+  if (!isRecord(value) || !hasOnlyKeys(value, AI_CONFIGURATION_KEYS)) {
+    return null;
+  }
+
+  const { apiKey, ...aiPatchValue } = value;
+  const aiPatch = parseAiPatch(aiPatchValue);
+
+  if (
+    aiPatch === null ||
+    (apiKey !== undefined &&
+      (typeof apiKey !== 'string' ||
+        apiKey.length > MAXIMUM_API_KEY_LENGTH))
+  ) {
+    return null;
+  }
+
+  return {
+    ...aiPatch,
+    ...(typeof apiKey === 'string' ? { apiKey } : {}),
+  };
+};
+
 export const mergeSettings = (
   settings: AppSettings,
   patch: SettingsPatch,
@@ -290,27 +372,84 @@ export const createDefaultSettings = (): AppSettings =>
 export const cloneSettings = (settings: AppSettings): AppSettings =>
   mergeSettings(settings, {});
 
+export const toRuntimeSettings = (
+  settings: Pick<AppSettings, 'general' | 'water'>,
+): RuntimeSettings => ({
+  general: { ...settings.general },
+  water: { ...settings.water },
+});
+
+export const toPreferencesSettings = (
+  settings: AppSettings,
+): PreferencesSettings => ({
+  ...toRuntimeSettings(settings),
+  ai: {
+    enabled: settings.ai.enabled,
+    provider: settings.ai.provider,
+    model: settings.ai.model,
+    apiKeyConfigured: settings.ai.apiKeyConfigured,
+    endpoint: settings.ai.endpoint,
+  },
+});
+
+export const createDefaultRuntimeSettings = (): RuntimeSettings =>
+  toRuntimeSettings(DEFAULT_SETTINGS);
+
+export const createDefaultPreferencesSettings = (): PreferencesSettings =>
+  toPreferencesSettings(DEFAULT_SETTINGS);
+
+export const mergePreferencesSettings = (
+  settings: PreferencesSettings,
+  patch: PreferencesSettingsPatch,
+): PreferencesSettings => ({
+  general: {
+    ...settings.general,
+    ...patch.general,
+  },
+  water: {
+    ...settings.water,
+    ...patch.water,
+  },
+  ai: { ...settings.ai },
+});
+
 export const parseSettings = (value: unknown): AppSettings | null => {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const patch = parseSettingsPatch(value);
-
   if (
-    patch === null ||
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ROOT_SETTING_KEYS) ||
+    !hasEveryKey(value, ROOT_SETTING_KEYS) ||
     !isRecord(value.general) ||
     !isRecord(value.water) ||
     !isRecord(value.ai) ||
-    Object.keys(value.general).length !== GENERAL_SETTING_KEYS.length ||
-    Object.keys(value.water).length !== WATER_SETTING_KEYS.length ||
+    !hasOnlyKeys(value.general, GENERAL_SETTING_KEYS) ||
+    !hasEveryKey(value.general, GENERAL_SETTING_KEYS) ||
+    !hasOnlyKeys(value.water, WATER_SETTING_KEYS) ||
+    !hasEveryKey(value.water, WATER_SETTING_KEYS) ||
     !hasOnlyKeys(value.ai, AI_SETTING_KEYS) ||
-    !hasEveryKey(value.ai, LEGACY_AI_SETTING_KEYS)
+    !hasEveryKey(value.ai, AI_SETTING_KEYS) ||
+    typeof value.ai.apiKeyConfigured !== 'boolean'
   ) {
+    return null;
+  }
+
+  const { apiKeyConfigured, ...aiPatchValue } = value.ai;
+  const patch = parseSettingsPatch({
+    general: value.general,
+    water: value.water,
+    ai: aiPatchValue,
+  });
+
+  if (patch === null) {
     return null;
   }
 
   const settings = mergeSettings(DEFAULT_SETTINGS, patch);
 
-  return settings;
+  return {
+    ...settings,
+    ai: {
+      ...settings.ai,
+      apiKeyConfigured,
+    },
+  };
 };

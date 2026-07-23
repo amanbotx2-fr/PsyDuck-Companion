@@ -317,6 +317,24 @@ select {
   color: var(--faint);
 }
 
+.credential-control {
+  display: flex;
+  width: 260px;
+  align-items: center;
+  gap: 8px;
+}
+
+.credential-control .settings-input {
+  min-width: 0;
+  flex: 1;
+  width: auto;
+}
+
+.credential-control__remove {
+  flex: 0 0 auto;
+  padding-inline: 10px;
+}
+
 .ai-settings-actions {
   display: flex;
   align-items: center;
@@ -429,6 +447,10 @@ select {
     width: 100%;
   }
 
+  .credential-control {
+    width: 100%;
+  }
+
   .settings-select--model {
     max-width: none;
   }
@@ -444,6 +466,10 @@ select {
 
   .settings-button {
     flex: 1;
+  }
+
+  .credential-control__remove {
+    flex: 0 0 auto;
   }
 
   .ai-save-actions {

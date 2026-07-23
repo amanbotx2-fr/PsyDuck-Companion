@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { AIContext } from './AIContext';
 import {
   isAIProviderId,
@@ -40,10 +42,18 @@ export interface AIAskOptions {
   readonly context?: AIContext;
 }
 
+interface AIProviderConfigurationFingerprint {
+  readonly apiKeyDigest: string;
+  readonly endpoint: string;
+  readonly model: string;
+}
+
 export class AIService {
   private readonly providers = new Map<AIProviderId, AIProvider>();
   private activeProvider: AIProvider | null = null;
-  private activeConfiguration: AIProviderConfiguration | null = null;
+  private activeConfigurationFingerprint:
+    | AIProviderConfigurationFingerprint
+    | null = null;
   private enabled = false;
   private disposed = false;
   private operationQueue: Promise<void> = Promise.resolve();
@@ -88,6 +98,8 @@ export class AIService {
         apiKey: configuration.apiKey.trim(),
         endpoint: configuration.endpoint.trim(),
       };
+      const nextConfigurationFingerprint =
+        this.fingerprintConfiguration(nextConfiguration);
 
       if (providerId !== null && nextProvider === null) {
         throw new AIServiceError(
@@ -101,8 +113,8 @@ export class AIService {
       if (
         nextProvider === this.activeProvider &&
         this.configurationsAreEqual(
-          nextConfiguration,
-          this.activeConfiguration,
+          nextConfigurationFingerprint,
+          this.activeConfigurationFingerprint,
         )
       ) {
         return;
@@ -110,7 +122,7 @@ export class AIService {
 
       const previousProvider = this.activeProvider;
       this.activeProvider = null;
-      this.activeConfiguration = null;
+      this.activeConfigurationFingerprint = null;
 
       if (previousProvider !== null) {
         await previousProvider.dispose();
@@ -119,7 +131,8 @@ export class AIService {
       if (nextProvider !== null) {
         await nextProvider.initialize(nextConfiguration);
         this.activeProvider = nextProvider;
-        this.activeConfiguration = nextConfiguration;
+        this.activeConfigurationFingerprint =
+          nextConfigurationFingerprint;
       }
     });
   }
@@ -193,7 +206,7 @@ export class AIService {
 
       const provider = this.activeProvider;
       this.activeProvider = null;
-      this.activeConfiguration = null;
+      this.activeConfigurationFingerprint = null;
 
       if (provider !== null) {
         await provider.dispose();
@@ -241,15 +254,27 @@ export class AIService {
   }
 
   private configurationsAreEqual(
-    left: AIProviderConfiguration,
-    right: AIProviderConfiguration | null,
+    left: AIProviderConfigurationFingerprint,
+    right: AIProviderConfigurationFingerprint | null,
   ): boolean {
     return (
       right !== null &&
       left.model === right.model &&
-      left.apiKey === right.apiKey &&
+      left.apiKeyDigest === right.apiKeyDigest &&
       left.endpoint === right.endpoint
     );
+  }
+
+  private fingerprintConfiguration(
+    configuration: AIProviderConfiguration,
+  ): AIProviderConfigurationFingerprint {
+    return {
+      apiKeyDigest: createHash('sha256')
+        .update(configuration.apiKey)
+        .digest('hex'),
+      endpoint: configuration.endpoint,
+      model: configuration.model,
+    };
   }
 
   private enqueueOperation(operation: () => Promise<void>): Promise<void> {

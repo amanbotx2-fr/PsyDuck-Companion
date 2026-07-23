@@ -3,6 +3,7 @@ import {
   BrowserWindow,
   ipcMain,
   Menu,
+  safeStorage,
   screen,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
@@ -20,8 +21,16 @@ import { OpenAIProvider } from '../ai/providers/OpenAIProvider';
 import { personalityService } from '../personality';
 import { IPC_CHANNELS } from '../shared/events';
 import {
-  parseSettingsPatch,
+  type AiProviderSelection,
+  parseAiConfigurationUpdate,
+  parsePreferencesSettingsPatch,
+  toPreferencesSettings,
+  toRuntimeSettings,
+  type AiConfigurationUpdate,
   type AppSettings,
+  type PreferencesSettings,
+  type PreferencesSettingsPatch,
+  type RuntimeSettings,
   type SettingsPatch,
 } from '../shared/settings';
 import type {
@@ -34,6 +43,10 @@ import {
   createCompanionContextMenu,
   type ApplicationMenuActions,
 } from './menus';
+import {
+  CredentialManager,
+  CredentialStorageError,
+} from './CredentialManager';
 import { createPreferencesWindow } from './preferencesWindow';
 import { SettingsService } from './SettingsService';
 import { createSystemTray } from './tray';
@@ -43,6 +56,11 @@ const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
 const MAX_AI_PROMPT_LENGTH = 4_096;
 const SETTINGS_FILE_NAME = 'settings.json';
+const API_KEY_PROVIDERS: ReadonlySet<AiProviderSelection> = new Set([
+  'openai',
+  'gemini',
+  'grok',
+]);
 
 let mainWindow: BrowserWindow | null = null;
 let preferencesWindow: BrowserWindow | null = null;
@@ -80,11 +98,17 @@ const synchronizeAISettings = (settings: AppSettings): Promise<void> => {
     return Promise.resolve();
   }
 
+  // Decrypt only for providers that require a credential. Ollama never
+  // causes protected API-key material to enter the provider configuration.
+  const apiKey = API_KEY_PROVIDERS.has(settings.ai.provider)
+    ? getSettingsService().getApiKey()
+    : '';
+
   return aiService.configure({
     enabled: settings.ai.enabled,
     provider: settings.ai.provider,
     model: settings.ai.model,
-    apiKey: settings.ai.apiKey,
+    apiKey,
     endpoint: settings.ai.endpoint,
   });
 };
@@ -106,14 +130,11 @@ const isWindowPosition = (value: unknown): value is ScreenPoint => {
   );
 };
 
-const isManagedRenderer = (sender: WebContents): boolean => {
-  const senderWindow = BrowserWindow.fromWebContents(sender);
-
-  return senderWindow === mainWindow || senderWindow === preferencesWindow;
-};
-
 const isCompanionRenderer = (sender: WebContents): boolean =>
   BrowserWindow.fromWebContents(sender) === mainWindow;
+
+const isPreferencesRenderer = (sender: WebContents): boolean =>
+  BrowserWindow.fromWebContents(sender) === preferencesWindow;
 
 const handleMoveWindow = (event: IpcMainEvent, position: unknown): void => {
   if (!isCompanionRenderer(event.sender) || !isWindowPosition(position)) {
@@ -263,7 +284,10 @@ const handleShowCompanionContextMenu = (event: IpcMainEvent): void => {
   ).popup({ window: mainWindow });
 };
 
-const broadcastSettings = (settings: AppSettings): void => {
+const broadcastRuntimeSettings = (settings: AppSettings): void => {
+  // Broadcast only the explicit secret-free projection, never AppSettings.
+  const runtimeSettings = toRuntimeSettings(settings);
+
   for (const targetWindow of [mainWindow, preferencesWindow]) {
     if (
       targetWindow !== null &&
@@ -271,8 +295,8 @@ const broadcastSettings = (settings: AppSettings): void => {
       !targetWindow.webContents.isDestroyed()
     ) {
       targetWindow.webContents.send(
-        IPC_CHANNELS.settingsChanged,
-        settings,
+        IPC_CHANNELS.runtimeSettingsChanged,
+        runtimeSettings,
       );
     }
   }
@@ -300,31 +324,77 @@ const handleGetCursorPosition = (
   return screen.getCursorScreenPoint();
 };
 
-const handleGetSettings = (event: IpcMainInvokeEvent): AppSettings => {
-  if (!isManagedRenderer(event.sender)) {
-    throw new Error('Settings are unavailable to this window.');
+const handleGetRuntimeSettings = (
+  event: IpcMainInvokeEvent,
+): RuntimeSettings => {
+  if (!isCompanionRenderer(event.sender)) {
+    throw new Error('Runtime settings are unavailable to this window.');
   }
 
-  return getSettingsService().get();
+  return toRuntimeSettings(getSettingsService().get());
 };
 
-const handleUpdateSettings = async (
+const handleGetPreferencesSettings = (
   event: IpcMainInvokeEvent,
-  value: unknown,
-): Promise<AppSettings> => {
-  if (!isManagedRenderer(event.sender)) {
-    throw new Error('Settings updates are unavailable to this window.');
+): PreferencesSettings => {
+  if (!isPreferencesRenderer(event.sender)) {
+    throw new Error('Preferences settings are unavailable to this window.');
   }
 
-  const patch = parseSettingsPatch(value);
+  return toPreferencesSettings(getSettingsService().get());
+};
+
+const handleUpdatePreferencesSettings = async (
+  event: IpcMainInvokeEvent,
+  value: unknown,
+): Promise<PreferencesSettings> => {
+  if (!isPreferencesRenderer(event.sender)) {
+    throw new Error('Preferences updates are unavailable to this window.');
+  }
+
+  const patch: PreferencesSettingsPatch | null =
+    parsePreferencesSettingsPatch(value);
 
   if (patch === null) {
     throw new TypeError('Invalid settings update.');
   }
 
   const settings = await getSettingsService().update(patch);
+  return toPreferencesSettings(settings);
+};
+
+const handleUpdateAiConfiguration = async (
+  event: IpcMainInvokeEvent,
+  value: unknown,
+): Promise<PreferencesSettings> => {
+  if (!isPreferencesRenderer(event.sender)) {
+    throw new Error('AI configuration is unavailable to this window.');
+  }
+
+  const configuration: AiConfigurationUpdate | null =
+    parseAiConfigurationUpdate(value);
+
+  if (configuration === null) {
+    throw new TypeError('Invalid AI configuration update.');
+  }
+
+  let settings: AppSettings;
+
+  try {
+    settings =
+      await getSettingsService().updateAiConfiguration(configuration);
+  } catch (error) {
+    if (error instanceof CredentialStorageError) {
+      console.warn(
+        `[security] credential_update_rejected: ${error.code}; the existing credential was preserved.`,
+      );
+    }
+
+    throw error;
+  }
+
   await synchronizeAISettings(settings);
-  return settings;
+  return toPreferencesSettings(settings);
 };
 
 const getAIServiceErrorMessage = (error: unknown): string => {
@@ -388,7 +458,7 @@ const handleAskAI = async (
 const handleListAIModels = async (
   event: IpcMainInvokeEvent,
 ): Promise<AIModelListResult> => {
-  if (!isManagedRenderer(event.sender)) {
+  if (!isPreferencesRenderer(event.sender)) {
     throw new Error('AI models are unavailable to this window.');
   }
 
@@ -404,7 +474,7 @@ const handleListAIModels = async (
 const handleTestAIConnection = async (
   event: IpcMainInvokeEvent,
 ): Promise<AIConnectionTestResult> => {
-  if (!isManagedRenderer(event.sender)) {
+  if (!isPreferencesRenderer(event.sender)) {
     throw new Error('AI connection testing is unavailable to this window.');
   }
 
@@ -422,8 +492,22 @@ const registerIpcHandlers = (): void => {
     IPC_CHANNELS.getCursorPosition,
     handleGetCursorPosition,
   );
-  ipcMain.handle(IPC_CHANNELS.getSettings, handleGetSettings);
-  ipcMain.handle(IPC_CHANNELS.updateSettings, handleUpdateSettings);
+  ipcMain.handle(
+    IPC_CHANNELS.getRuntimeSettings,
+    handleGetRuntimeSettings,
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.getPreferencesSettings,
+    handleGetPreferencesSettings,
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.updatePreferencesSettings,
+    handleUpdatePreferencesSettings,
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.updateAiConfiguration,
+    handleUpdateAiConfiguration,
+  );
   ipcMain.handle(IPC_CHANNELS.askAI, handleAskAI);
   ipcMain.handle(IPC_CHANNELS.listAIModels, handleListAIModels);
   ipcMain.handle(
@@ -439,8 +523,10 @@ const registerIpcHandlers = (): void => {
 
 const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.getCursorPosition);
-  ipcMain.removeHandler(IPC_CHANNELS.getSettings);
-  ipcMain.removeHandler(IPC_CHANNELS.updateSettings);
+  ipcMain.removeHandler(IPC_CHANNELS.getRuntimeSettings);
+  ipcMain.removeHandler(IPC_CHANNELS.getPreferencesSettings);
+  ipcMain.removeHandler(IPC_CHANNELS.updatePreferencesSettings);
+  ipcMain.removeHandler(IPC_CHANNELS.updateAiConfiguration);
   ipcMain.removeHandler(IPC_CHANNELS.askAI);
   ipcMain.removeHandler(IPC_CHANNELS.listAIModels);
   ipcMain.removeHandler(IPC_CHANNELS.testAIConnection);
@@ -454,8 +540,17 @@ const unregisterIpcHandlers = (): void => {
 Menu.setApplicationMenu(null);
 
 void app.whenReady().then(async () => {
+  const credentialManager = new CredentialManager(safeStorage);
+
+  if (!credentialManager.isEncryptionAvailable()) {
+    console.warn(
+      '[security] safe_storage_unavailable: API credentials cannot be saved or decrypted securely. Existing credential data will remain untouched.',
+    );
+  }
+
   settingsService = new SettingsService(
     join(app.getPath('userData'), SETTINGS_FILE_NAME),
+    credentialManager,
   );
 
   try {
@@ -484,10 +579,7 @@ void app.whenReady().then(async () => {
 
   unsubscribeFromSettings = settingsService.subscribe((settings) => {
     applyRuntimeSettings(settings);
-    broadcastSettings(settings);
-    void synchronizeAISettings(settings).catch((error: unknown) => {
-      console.error('[ai] configuration_failed', error);
-    });
+    broadcastRuntimeSettings(settings);
   });
 
   app.on('activate', showMainWindow);

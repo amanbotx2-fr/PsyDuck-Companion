@@ -16,7 +16,7 @@ import {
   type ChatInputDismissReason,
 } from './components/ChatInputBubble';
 import { SpeechBubble } from './components/SpeechBubble';
-import { useSettings } from './hooks/useSettings';
+import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
 
 const PLACEHOLDER_BEHAVIORS: readonly BehaviorId[] = [
@@ -71,7 +71,7 @@ export function App() {
   const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
     INITIAL_AI_INTERACTION_STATE,
   );
-  const { settings } = useSettings();
+  const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
 
   const transitionAIInteraction = useCallback(

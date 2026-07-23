@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ChangeEvent,
   type ReactNode,
@@ -11,11 +12,12 @@ import {
   isValidAiEndpoint,
   isWaterReminderInterval,
   WATER_REMINDER_INTERVAL_OPTIONS,
-  type AiSettings,
-  type SettingsPatch,
+  type AiConfigurationUpdate,
+  type PreferencesAiSettings,
+  type PreferencesSettingsPatch,
 } from '../shared/settings';
 import { personalityService } from '../personality';
-import { useSettings } from './hooks/useSettings';
+import { usePreferencesSettings } from './hooks/usePreferencesSettings';
 
 interface PreferenceRowProps {
   readonly control: ReactNode;
@@ -90,9 +92,20 @@ const INITIAL_CONNECTION_STATUS: ConnectionStatus = { phase: 'idle' };
 const INITIAL_MODEL_LOADING_STATUS: ModelLoadingStatus = { phase: 'idle' };
 
 export function PreferencesApp() {
-  const { settings, status, errorMessage, update } = useSettings();
-  const [aiDraft, setAiDraft] = useState<AiSettings>(settings.ai);
+  const {
+    settings,
+    status,
+    errorMessage,
+    update,
+    updateAiConfiguration,
+  } = usePreferencesSettings();
+  const [aiDraft, setAiDraft] =
+    useState<PreferencesAiSettings>(settings.ai);
   const [aiDirty, setAiDirty] = useState(false);
+  const [apiKeyEdited, setApiKeyEdited] = useState(false);
+  const [apiKeyClearRequested, setApiKeyClearRequested] =
+    useState(false);
+  const apiKeyInputRef = useRef<HTMLInputElement>(null);
   const [availableModels, setAvailableModels] = useState<
     readonly { readonly id: string; readonly displayName?: string }[]
   >([]);
@@ -120,7 +133,7 @@ export function PreferencesApp() {
             ? 'Unsaved'
             : 'Saved';
 
-  const save = (patch: SettingsPatch): void => {
+  const save = (patch: PreferencesSettingsPatch): void => {
     void update(patch);
   };
 
@@ -133,49 +146,81 @@ export function PreferencesApp() {
       settings.ai.enabled === aiDraft.enabled &&
       settings.ai.provider === aiDraft.provider &&
       settings.ai.model === aiDraft.model &&
-      settings.ai.apiKey === aiDraft.apiKey &&
+      settings.ai.apiKeyConfigured === aiDraft.apiKeyConfigured &&
       settings.ai.endpoint === aiDraft.endpoint
     ) {
       return;
     }
 
     setAiDraft(settings.ai);
+    setApiKeyEdited(false);
+    setApiKeyClearRequested(false);
+
+    if (apiKeyInputRef.current !== null) {
+      apiKeyInputRef.current.value = '';
+    }
+
     setAvailableModels([]);
     setConnectionStatus(INITIAL_CONNECTION_STATUS);
     setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
   }, [
     aiDirty,
-    settings.ai.apiKey,
+    settings.ai.apiKeyConfigured,
     settings.ai.enabled,
     settings.ai.endpoint,
     settings.ai.model,
     settings.ai.provider,
-    aiDraft.apiKey,
+    aiDraft.apiKeyConfigured,
     aiDraft.enabled,
     aiDraft.endpoint,
     aiDraft.model,
     aiDraft.provider,
   ]);
 
+  const invalidateAiConnection = (): void => {
+    setAvailableModels([]);
+    setConnectionStatus(INITIAL_CONNECTION_STATUS);
+    setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
+  };
+
   const updateAiDraft = (
-    patch: Partial<AiSettings>,
+    patch: Partial<PreferencesAiSettings>,
     invalidateConnection = true,
   ): void => {
     setAiDraft((currentDraft) => ({ ...currentDraft, ...patch }));
     setAiDirty(true);
 
     if (invalidateConnection) {
-      setAvailableModels([]);
-      setConnectionStatus(INITIAL_CONNECTION_STATUS);
-      setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
+      invalidateAiConnection();
     }
   };
 
+  const handleApiKeyChange = (): void => {
+    setApiKeyEdited(true);
+    setApiKeyClearRequested(false);
+    setAiDirty(true);
+    invalidateAiConnection();
+  };
+
+  const clearApiKeyDraft = (): void => {
+    if (apiKeyInputRef.current !== null) {
+      apiKeyInputRef.current.value = '';
+    }
+
+    setApiKeyEdited(false);
+    setApiKeyClearRequested(true);
+    setAiDraft((currentDraft) => ({
+      ...currentDraft,
+      apiKeyConfigured: false,
+    }));
+    setAiDirty(true);
+    invalidateAiConnection();
+  };
+
   const saveAiSettings = async (): Promise<boolean> => {
-    const normalizedDraft: AiSettings = {
+    const normalizedDraft: PreferencesAiSettings = {
       ...aiDraft,
       model: aiDraft.model.trim(),
-      apiKey: aiDraft.apiKey.trim(),
       endpoint: aiDraft.endpoint.trim(),
     };
 
@@ -190,11 +235,35 @@ export function PreferencesApp() {
       return false;
     }
 
-    const didSave = await update({ ai: normalizedDraft });
+    const apiKey = apiKeyClearRequested
+      ? ''
+      : apiKeyEdited
+        ? (apiKeyInputRef.current?.value.trim() ?? '')
+        : undefined;
+    const configuration: AiConfigurationUpdate = {
+      enabled: normalizedDraft.enabled,
+      provider: normalizedDraft.provider,
+      model: normalizedDraft.model,
+      endpoint: normalizedDraft.endpoint,
+      ...(apiKey === undefined ? {} : { apiKey }),
+    };
+    const didSave = await updateAiConfiguration(configuration);
 
     if (didSave) {
-      setAiDraft(normalizedDraft);
+      setAiDraft({
+        ...normalizedDraft,
+        apiKeyConfigured:
+          apiKey === undefined
+            ? normalizedDraft.apiKeyConfigured
+            : apiKey.length > 0,
+      });
       setAiDirty(false);
+      setApiKeyEdited(false);
+      setApiKeyClearRequested(false);
+
+      if (apiKeyInputRef.current !== null) {
+        apiKeyInputRef.current.value = '';
+      }
     } else {
       setConnectionStatus({
         phase: 'error',
@@ -217,9 +286,9 @@ export function PreferencesApp() {
       return;
     }
 
-    const desktopBridge = window.psyduck;
+    const preferencesBridge = window.psyduckPreferences;
 
-    if (desktopBridge === undefined) {
+    if (preferencesBridge === undefined) {
       setConnectionStatus({
         phase: 'error',
         message: personalityService.getProviderFailedMessage(),
@@ -228,7 +297,7 @@ export function PreferencesApp() {
     }
 
     try {
-      const result = await desktopBridge.testAIConnection();
+      const result = await preferencesBridge.testAIConnection();
 
       if (!result.ok) {
         setConnectionStatus({
@@ -257,9 +326,9 @@ export function PreferencesApp() {
       return;
     }
 
-    const desktopBridge = window.psyduck;
+    const preferencesBridge = window.psyduckPreferences;
 
-    if (desktopBridge === undefined) {
+    if (preferencesBridge === undefined) {
       setModelLoadingStatus({
         phase: 'error',
         message: 'Model discovery is unavailable in this window.',
@@ -270,7 +339,7 @@ export function PreferencesApp() {
     setModelLoadingStatus({ phase: 'loading' });
 
     try {
-      const result = await desktopBridge.listAIModels();
+      const result = await preferencesBridge.listAIModels();
 
       if (!result.ok) {
         setAvailableModels([]);
@@ -498,17 +567,27 @@ export function PreferencesApp() {
               onChange={(event) => {
                 const provider = event.currentTarget.value;
 
+                if (apiKeyInputRef.current !== null) {
+                  apiKeyInputRef.current.value = '';
+                }
+
+                setApiKeyEdited(false);
+                setApiKeyClearRequested(
+                  (currentRequest) =>
+                    currentRequest || aiDraft.apiKeyConfigured,
+                );
+
                 if (provider === '') {
                   updateAiDraft({
                     provider: '',
                     model: '',
-                    apiKey: '',
+                    apiKeyConfigured: false,
                   });
                 } else if (isAiProvider(provider)) {
                   updateAiDraft({
                     provider,
                     model: '',
-                    apiKey: '',
+                    apiKeyConfigured: false,
                   });
                 }
               }}
@@ -547,21 +626,40 @@ export function PreferencesApp() {
           <PreferenceRow
             htmlFor="ai-api-key"
             label="API key"
-            description="Stored locally in the application settings file."
+            description={
+              aiDraft.apiKeyConfigured
+                ? 'A key is configured. Enter a new key to replace it.'
+                : 'Enter a key to configure this provider.'
+            }
             control={
-              <input
-                className="settings-input"
-                id="ai-api-key"
-                type="password"
-                value={aiDraft.apiKey}
-                placeholder="Enter API key"
-                disabled={settingsAreLoading || aiActionInProgress}
-                autoComplete="new-password"
-                spellCheck={false}
-                onChange={(event) => {
-                  updateAiDraft({ apiKey: event.currentTarget.value });
-                }}
-              />
+              <div className="credential-control">
+                <input
+                  ref={apiKeyInputRef}
+                  className="settings-input"
+                  id="ai-api-key"
+                  type="password"
+                  defaultValue=""
+                  placeholder={
+                    aiDraft.apiKeyConfigured
+                      ? 'Configured'
+                      : 'Enter API key'
+                  }
+                  disabled={settingsAreLoading || aiActionInProgress}
+                  autoComplete="new-password"
+                  spellCheck={false}
+                  onChange={handleApiKeyChange}
+                />
+                {aiDraft.apiKeyConfigured ? (
+                  <button
+                    className="settings-button settings-button--secondary credential-control__remove"
+                    type="button"
+                    disabled={settingsAreLoading || aiActionInProgress}
+                    onClick={clearApiKeyDraft}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
             }
           />
         )}

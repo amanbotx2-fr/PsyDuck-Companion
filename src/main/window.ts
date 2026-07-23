@@ -1,7 +1,11 @@
 import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 
-import { APP_NAME, RENDERER_DEV_URL_ENV } from '../shared/constants';
+import { APP_NAME } from '../shared/constants';
+import {
+  hardenRendererNavigation,
+  loadRenderer,
+} from './rendererSecurity';
 
 const WINDOW_WIDTH = 220;
 const WINDOW_HEIGHT = 220;
@@ -52,18 +56,8 @@ export const createMainWindow = (alwaysOnTop = true): BrowserWindow => {
     mainWindow.show();
   });
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  mainWindow.webContents.on('will-navigate', (event) => {
-    event.preventDefault();
-  });
-
-  const rendererDevUrl = process.env[RENDERER_DEV_URL_ENV];
-
-  if (rendererDevUrl !== undefined) {
-    void mainWindow.loadURL(rendererDevUrl);
-  } else {
-    void mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  hardenRendererNavigation(mainWindow);
+  loadRenderer(mainWindow, 'companion');
 
   return mainWindow;
 };

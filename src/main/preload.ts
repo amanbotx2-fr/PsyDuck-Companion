@@ -1,14 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { AppSettings, SettingsPatch } from '../shared/settings';
+import type { RuntimeSettings } from '../shared/settings';
 import type {
   AIAskResult,
-  AIConnectionTestResult,
-  AIModelListResult,
+  CompanionBridge,
   CursorPositionListener,
-  DesktopBridge,
+  RuntimeSettingsChangeListener,
   ScreenPoint,
-  SettingsChangeListener,
 } from '../shared/types';
 
 // Sandboxed preload scripts cannot require local CommonJS modules. Keep the
@@ -18,20 +16,20 @@ const IPC_CHANNELS = {
   getCursorPosition: 'psyduck:get-cursor-position',
   moveWindow: 'psyduck:move-window',
   showCompanionContextMenu: 'psyduck:show-context-menu',
-  getSettings: 'settings:get',
-  updateSettings: 'settings:update',
-  settingsChanged: 'settings:changed',
+  getRuntimeSettings: 'runtime-settings:get',
+  runtimeSettingsChanged: 'runtime-settings:changed',
   askAI: 'ai:ask',
-  listAIModels: 'ai:list-models',
-  testAIConnection: 'ai:test-connection',
 } as const;
 
-const desktopBridge: DesktopBridge = Object.freeze({
+const companionBridge: CompanionBridge = Object.freeze({
   platform: process.platform,
   getCursorPosition: () =>
     ipcRenderer.invoke(IPC_CHANNELS.getCursorPosition) as Promise<ScreenPoint>,
   onCursorPosition: (listener: CursorPositionListener) => {
-    const handleCursorPosition = (_event: Electron.IpcRendererEvent, position: ScreenPoint) => {
+    const handleCursorPosition = (
+      _event: Electron.IpcRendererEvent,
+      position: ScreenPoint,
+    ) => {
       listener(position);
     };
 
@@ -50,40 +48,32 @@ const desktopBridge: DesktopBridge = Object.freeze({
   showCompanionContextMenu: () => {
     ipcRenderer.send(IPC_CHANNELS.showCompanionContextMenu);
   },
-  getSettings: () =>
-    ipcRenderer.invoke(IPC_CHANNELS.getSettings) as Promise<AppSettings>,
-  updateSettings: (patch: SettingsPatch) =>
+  getRuntimeSettings: () =>
     ipcRenderer.invoke(
-      IPC_CHANNELS.updateSettings,
-      patch,
-    ) as Promise<AppSettings>,
+      IPC_CHANNELS.getRuntimeSettings,
+    ) as Promise<RuntimeSettings>,
   askAI: (prompt: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.askAI, prompt) as Promise<AIAskResult>,
-  listAIModels: () =>
-    ipcRenderer.invoke(
-      IPC_CHANNELS.listAIModels,
-    ) as Promise<AIModelListResult>,
-  testAIConnection: () =>
-    ipcRenderer.invoke(
-      IPC_CHANNELS.testAIConnection,
-    ) as Promise<AIConnectionTestResult>,
-  onSettingsChanged: (listener: SettingsChangeListener) => {
-    const handleSettingsChanged = (
+  onRuntimeSettingsChanged: (listener: RuntimeSettingsChangeListener) => {
+    const handleRuntimeSettingsChanged = (
       _event: Electron.IpcRendererEvent,
-      settings: AppSettings,
+      settings: RuntimeSettings,
     ): void => {
       listener(settings);
     };
 
-    ipcRenderer.on(IPC_CHANNELS.settingsChanged, handleSettingsChanged);
+    ipcRenderer.on(
+      IPC_CHANNELS.runtimeSettingsChanged,
+      handleRuntimeSettingsChanged,
+    );
 
     return () => {
       ipcRenderer.removeListener(
-        IPC_CHANNELS.settingsChanged,
-        handleSettingsChanged,
+        IPC_CHANNELS.runtimeSettingsChanged,
+        handleRuntimeSettingsChanged,
       );
     };
   },
 });
 
-contextBridge.exposeInMainWorld('psyduck', desktopBridge);
+contextBridge.exposeInMainWorld('psyduck', companionBridge);

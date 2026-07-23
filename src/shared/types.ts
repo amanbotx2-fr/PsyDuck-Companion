@@ -1,5 +1,10 @@
 import type { AIModel, AIResponse } from '../ai/AIProvider';
-import type { AppSettings, SettingsPatch } from './settings';
+import type {
+  AiConfigurationUpdate,
+  PreferencesSettings,
+  PreferencesSettingsPatch,
+  RuntimeSettings,
+} from './settings';
 
 export interface ScreenPoint {
   readonly x: number;
@@ -7,7 +12,9 @@ export interface ScreenPoint {
 }
 
 export type CursorPositionListener = (position: ScreenPoint) => void;
-export type SettingsChangeListener = (settings: AppSettings) => void;
+export type RuntimeSettingsChangeListener = (
+  settings: RuntimeSettings,
+) => void;
 
 export type AIAskResult =
   | {
@@ -39,18 +46,30 @@ export type AIConnectionTestResult =
       readonly message: string;
     };
 
-export interface DesktopBridge {
+export interface CompanionBridge {
   readonly platform: string;
   readonly getCursorPosition: () => Promise<ScreenPoint>;
   readonly onCursorPosition: (listener: CursorPositionListener) => () => void;
   readonly moveWindow: (position: ScreenPoint) => void;
   readonly showCompanionContextMenu: () => void;
-  readonly getSettings: () => Promise<AppSettings>;
-  readonly updateSettings: (patch: SettingsPatch) => Promise<AppSettings>;
+  readonly getRuntimeSettings: () => Promise<RuntimeSettings>;
   readonly askAI: (prompt: string) => Promise<AIAskResult>;
+  readonly onRuntimeSettingsChanged: (
+    listener: RuntimeSettingsChangeListener,
+  ) => () => void;
+}
+
+export interface PreferencesBridge {
+  readonly getPreferencesSettings: () => Promise<PreferencesSettings>;
+  readonly updatePreferencesSettings: (
+    patch: PreferencesSettingsPatch,
+  ) => Promise<PreferencesSettings>;
+  readonly updateAiConfiguration: (
+    configuration: AiConfigurationUpdate,
+  ) => Promise<PreferencesSettings>;
   readonly listAIModels: () => Promise<AIModelListResult>;
   readonly testAIConnection: () => Promise<AIConnectionTestResult>;
-  readonly onSettingsChanged: (
-    listener: SettingsChangeListener,
+  readonly onRuntimeSettingsChanged: (
+    listener: RuntimeSettingsChangeListener,
   ) => () => void;
 }
