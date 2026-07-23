@@ -7,8 +7,10 @@ import type {
 export const MAXIMUM_AI_OUTPUT_TOKENS = 4_096;
 export const MAXIMUM_AI_RESPONSE_CHARACTERS = 32_768;
 export const MAXIMUM_PROVIDER_ERROR_MESSAGE_CHARACTERS = 512;
-export const MAXIMUM_AI_MODEL_COUNT = 256;
-export const MAXIMUM_AI_MODEL_CANDIDATES = 1_024;
+// OpenAI-compatible aggregators can expose several hundred models. Keep model
+// metadata bounded while allowing their complete current catalogs through.
+export const MAXIMUM_AI_MODEL_COUNT = 1_024;
+export const MAXIMUM_AI_MODEL_CANDIDATES = 2_048;
 export const MAXIMUM_AI_MODEL_ID_CHARACTERS = 256;
 export const MAXIMUM_AI_MODEL_DISPLAY_NAME_CHARACTERS = 256;
 

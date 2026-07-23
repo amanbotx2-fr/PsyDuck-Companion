@@ -380,6 +380,11 @@ export function PreferencesApp() {
         return;
       }
 
+      console.info('[ai] model_selector_populated', {
+        providerId: aiDraft.provider,
+        displayedModelCount: result.models.length,
+      });
+
       if (result.models.length === 0) {
         setAvailableModels([]);
         setModelLoadingStatus({ phase: 'empty' });
@@ -842,12 +847,38 @@ export function PreferencesApp() {
           }
           control={
             aiDraft.provider === 'custom' ? (
-              <>
+              modelLoadingStatus.phase === 'loaded' &&
+              availableModels.length > 0 ? (
+                <select
+                  className="settings-select settings-select--model"
+                  id="ai-model"
+                  value={aiDraft.model}
+                  disabled={settingsAreLoading || aiActionInProgress}
+                  onChange={(event) => {
+                    updateAiDraft(
+                      { model: event.currentTarget.value },
+                      false,
+                    );
+                  }}
+                >
+                  {!availableModels.some(
+                    (model) => model.id === aiDraft.model,
+                  ) && aiDraft.model.trim().length > 0 ? (
+                    <option value={aiDraft.model}>
+                      {aiDraft.model} (manual)
+                    </option>
+                  ) : null}
+                  {availableModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.displayName ?? model.id}
+                    </option>
+                  ))}
+                </select>
+              ) : (
                 <input
                   className="settings-input settings-select--model"
                   id="ai-model"
                   type="text"
-                  list="ai-model-options"
                   value={aiDraft.model}
                   placeholder="Enter model ID"
                   disabled={settingsAreLoading || aiActionInProgress}
@@ -860,14 +891,7 @@ export function PreferencesApp() {
                     );
                   }}
                 />
-                <datalist id="ai-model-options">
-                  {availableModels.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.displayName ?? model.id}
-                    </option>
-                  ))}
-                </datalist>
-              </>
+              )
             ) : (
               <select
                 className="settings-select settings-select--model"

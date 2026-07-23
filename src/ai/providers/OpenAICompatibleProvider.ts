@@ -52,10 +52,26 @@ export interface OpenAICompatibleProviderOptions {
   readonly apiKeyRequired?: boolean;
   readonly baseURL?: string;
   readonly connectionTestRequestUrl?: string;
+  readonly logModelDiscovery?: (
+    diagnostics: OpenAICompatibleModelDiscoveryDiagnostics,
+  ) => void;
   readonly modelDiscoveryOptional?: boolean;
   readonly requestProtocol?: OpenAIRequestProtocol;
   readonly useConfiguredBaseUrl?: boolean;
 }
+
+export interface OpenAICompatibleModelDiscoveryDiagnostics {
+  readonly providerId: AIProviderId;
+  readonly rawResponseLength: number;
+  readonly parsedModelCount: number;
+  readonly displayedModelCount: number;
+}
+
+const logModelDiscoveryByDefault = (
+  diagnostics: OpenAICompatibleModelDiscoveryDiagnostics,
+): void => {
+  console.info('[ai] model_discovery_counts', diagnostics);
+};
 
 const readHttpStatus = (error: unknown): number | null => {
   if (typeof error !== 'object' || error === null || !('status' in error)) {
@@ -91,6 +107,9 @@ export class OpenAICompatibleProvider implements AIProvider {
   private readonly apiKeyRequired: boolean;
   private readonly connectionTestRequestUrl: string | undefined;
   private readonly fixedBaseURL: string | undefined;
+  private readonly logModelDiscovery: (
+    diagnostics: OpenAICompatibleModelDiscoveryDiagnostics,
+  ) => void;
   private readonly modelDiscoveryOptional: boolean;
   private readonly requestProtocol: OpenAIRequestProtocol;
   private readonly useConfiguredBaseUrl: boolean;
@@ -110,6 +129,8 @@ export class OpenAICompatibleProvider implements AIProvider {
     this.connectionTestRequestUrl =
       options.connectionTestRequestUrl;
     this.fixedBaseURL = options.baseURL;
+    this.logModelDiscovery =
+      options.logModelDiscovery ?? logModelDiscoveryByDefault;
     this.modelDiscoveryOptional =
       options.modelDiscoveryOptional ?? false;
     this.requestProtocol = options.requestProtocol ?? 'responses';
@@ -247,12 +268,17 @@ export class OpenAICompatibleProvider implements AIProvider {
       );
       const models: AIModel[] = [];
       let inspectedModels = 0;
+      const rawResponseLength = page.data.length;
 
       for (const model of page.data) {
         inspectedModels += 1;
 
         if (inspectedModels > MAXIMUM_AI_MODEL_CANDIDATES) {
           break;
+        }
+
+        if (typeof model.id !== 'string') {
+          continue;
         }
 
         if (this.id !== 'openai' || isOpenAITextModel(model.id)) {
@@ -263,7 +289,14 @@ export class OpenAICompatibleProvider implements AIProvider {
       // OpenAI's Models API exposes identifiers and ownership, but not endpoint
       // capability metadata. Filter the account-specific response conservatively
       // for OpenAI; compatible providers keep their server-defined catalog.
-      return normalizeModels(models);
+      const normalizedModels = normalizeModels(models);
+      this.logModelDiscovery({
+        providerId: this.id,
+        rawResponseLength,
+        parsedModelCount: models.length,
+        displayedModelCount: normalizedModels.length,
+      });
+      return normalizedModels;
     } catch (error) {
       if (
         this.modelDiscoveryOptional &&

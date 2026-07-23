@@ -22,12 +22,14 @@ const {
   toPreferencesSettings,
 } = require('../dist/shared/settings.js');
 
-const createCustomProvider = () =>
+const createCustomProvider = (overrides = {}) =>
   new OpenAICompatibleProvider('custom', 'Custom provider', {
     apiKeyRequired: false,
+    logModelDiscovery: () => {},
     modelDiscoveryOptional: true,
     requestProtocol: 'auto',
     useConfiguredBaseUrl: true,
+    ...overrides,
   });
 
 const readRequestBody = async (request) => {
@@ -150,6 +152,60 @@ describe('OpenAI-compatible endpoint validation', () => {
 });
 
 describe('OpenAI-compatible provider', () => {
+  test('returns a complete OpenRouter-style model catalog and logs every stage count', async (t) => {
+    const catalog = Array.from({ length: 420 }, (_, index) => ({
+      id: `provider/model-${String(index).padStart(3, '0')}`,
+      name: `Model ${index}`,
+      object: 'model',
+      created: index + 1,
+    }));
+    const rawModels = [
+      ...catalog,
+      catalog[0],
+      { name: 'Missing ID', object: 'model', created: 999 },
+    ];
+    const api = await startApiServer(async (request, response) => {
+      await readRequestBody(request);
+
+      if (request.method === 'GET' && request.url === '/v1/models') {
+        sendJson(response, 200, {
+          object: 'list',
+          data: rawModels,
+        });
+        return;
+      }
+
+      sendJson(response, 404, { error: { message: 'Not found.' } });
+    });
+    t.after(api.close);
+    const discoveryDiagnostics = [];
+    const service = new AIService([
+      createCustomProvider({
+        logModelDiscovery: (diagnostics) => {
+          discoveryDiagnostics.push(diagnostics);
+        },
+      }),
+    ]);
+    t.after(() => service.dispose());
+
+    await configureService(service, api.baseUrl);
+    const models = await service.listModels();
+
+    assert.equal(models.length, catalog.length);
+    assert.deepEqual(
+      new Set(models.map((model) => model.id)),
+      new Set(catalog.map((model) => model.id)),
+    );
+    assert.deepEqual(discoveryDiagnostics, [
+      {
+        providerId: 'custom',
+        rawResponseLength: 422,
+        parsedModelCount: 421,
+        displayedModelCount: 420,
+      },
+    ]);
+  });
+
   test('loads models and chats with a manual model without an API key', async (t) => {
     const requests = [];
     const api = await startApiServer(async (request, response) => {
