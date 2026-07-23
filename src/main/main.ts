@@ -24,6 +24,7 @@ import {
 import { GeminiProvider } from '../ai/providers/GeminiProvider';
 import { GrokProvider } from '../ai/providers/GrokProvider';
 import { OllamaProvider } from '../ai/providers/OllamaProvider';
+import { OpenAICompatibleProvider } from '../ai/providers/OpenAICompatibleProvider';
 import { OpenAIProvider } from '../ai/providers/OpenAIProvider';
 import {
   LoopbackOllamaEndpointPolicy,
@@ -41,6 +42,7 @@ import {
 } from '../shared/reminders';
 import {
   type AiProviderSelection,
+  normalizeOpenAICompatibleBaseUrl,
   normalizeUserName,
   parseAiConfigurationUpdate,
   parsePreferencesSettingsPatch,
@@ -60,9 +62,11 @@ import type {
   ScreenPoint,
 } from '../shared/types';
 import {
+  createApplicationMenu,
   createCompanionContextMenu,
   type ApplicationMenuActions,
 } from './menus';
+import { getGrokConnectionTestFailure } from './AIConnectionDiagnostics';
 import {
   CredentialManager,
   CredentialStorageError,
@@ -102,6 +106,7 @@ const API_KEY_PROVIDERS: ReadonlySet<AiProviderSelection> = new Set([
   'openai',
   'gemini',
   'grok',
+  'custom',
 ]);
 const ollamaEndpointPolicy = new LoopbackOllamaEndpointPolicy();
 const aiRequestManager = new AIRequestManager();
@@ -200,6 +205,12 @@ const createAIService = (): AIService =>
     new GeminiProvider(),
     new GrokProvider(),
     new OllamaProvider(),
+    new OpenAICompatibleProvider('custom', 'Custom provider', {
+      apiKeyRequired: false,
+      modelDiscoveryOptional: true,
+      requestProtocol: 'auto',
+      useConfiguredBaseUrl: true,
+    }),
   ]);
 
 const synchronizeAISettings = (settings: AppSettings): Promise<void> => {
@@ -219,6 +230,7 @@ const synchronizeAISettings = (settings: AppSettings): Promise<void> => {
     model: settings.ai.model,
     apiKey,
     endpoint: settings.ai.endpoint,
+    baseUrl: settings.ai.baseUrl,
   });
 };
 
@@ -875,6 +887,7 @@ const handleUpdateAiConfiguration = async (
   const currentAiSettings = getSettingsService().get().ai;
   const nextProvider =
     configuration.provider ?? currentAiSettings.provider;
+  let normalizedConfiguration = configuration;
 
   if (nextProvider === 'ollama') {
     const nextEndpoint =
@@ -896,21 +909,49 @@ const handleUpdateAiConfiguration = async (
     }
   }
 
+  if (nextProvider === 'custom') {
+    const nextBaseUrl =
+      configuration.baseUrl ?? currentAiSettings.baseUrl;
+    const normalizedBaseUrl =
+      normalizeOpenAICompatibleBaseUrl(nextBaseUrl);
+
+    if (normalizedBaseUrl === null) {
+      console.warn('[security] custom_ai_base_url_rejected', {
+        operation: 'settings_update',
+        reason: 'invalid_url',
+      });
+      throw new TypeError(
+        'Enter a valid HTTPS URL or a local/private-network HTTP URL.',
+      );
+    }
+
+    if (configuration.baseUrl !== undefined) {
+      normalizedConfiguration = {
+        ...configuration,
+        baseUrl: normalizedBaseUrl,
+      };
+    }
+  }
+
   let settings: AppSettings;
   const configurationChanged =
-    (configuration.enabled !== undefined &&
-      configuration.enabled !== currentAiSettings.enabled) ||
-    (configuration.provider !== undefined &&
-      configuration.provider !== currentAiSettings.provider) ||
-    (configuration.model !== undefined &&
-      configuration.model !== currentAiSettings.model) ||
-    (configuration.endpoint !== undefined &&
-      configuration.endpoint !== currentAiSettings.endpoint) ||
-    configuration.apiKey !== undefined;
+    (normalizedConfiguration.enabled !== undefined &&
+      normalizedConfiguration.enabled !== currentAiSettings.enabled) ||
+    (normalizedConfiguration.provider !== undefined &&
+      normalizedConfiguration.provider !== currentAiSettings.provider) ||
+    (normalizedConfiguration.model !== undefined &&
+      normalizedConfiguration.model !== currentAiSettings.model) ||
+    (normalizedConfiguration.endpoint !== undefined &&
+      normalizedConfiguration.endpoint !== currentAiSettings.endpoint) ||
+    (normalizedConfiguration.baseUrl !== undefined &&
+      normalizedConfiguration.baseUrl !== currentAiSettings.baseUrl) ||
+    normalizedConfiguration.apiKey !== undefined;
 
   try {
     settings =
-      await getSettingsService().updateAiConfiguration(configuration);
+      await getSettingsService().updateAiConfiguration(
+        normalizedConfiguration,
+      );
   } catch (error) {
     if (error instanceof CredentialStorageError) {
       console.warn(
@@ -941,6 +982,17 @@ const getAIServiceErrorMessage = (error: unknown): string => {
   }
 
   return personalityService.getErrorMessage();
+};
+
+const getAIConfigurationErrorMessage = (error: unknown): string => {
+  if (
+    error instanceof AIProviderError &&
+    (error.providerId === 'custom' || error.providerId === 'grok')
+  ) {
+    return error.message;
+  }
+
+  return getAIServiceErrorMessage(error);
 };
 
 const logUnexpectedAIError = (operation: string, error: unknown): void => {
@@ -1049,7 +1101,7 @@ const handleListAIModels = async (
           logUnexpectedAIError('model_list', error);
           return {
             ok: false,
-            message: getAIServiceErrorMessage(error),
+            message: getAIConfigurationErrorMessage(error),
           };
         }
       },
@@ -1078,10 +1130,16 @@ const handleTestAIConnection = async (
             await getAIService().testConnection({ signal });
           return { ok: true, ...result };
         } catch (error) {
+          const grokFailure = getGrokConnectionTestFailure(error);
+
+          if (grokFailure !== null) {
+            return grokFailure;
+          }
+
           logUnexpectedAIError('connection_test', error);
           return {
             ok: false,
-            message: getAIServiceErrorMessage(error),
+            message: getAIConfigurationErrorMessage(error),
           };
         }
       },
@@ -1291,7 +1349,7 @@ const unregisterIpcHandlers = (): void => {
   );
 };
 
-Menu.setApplicationMenu(null);
+Menu.setApplicationMenu(createApplicationMenu());
 
 void app.whenReady().then(async () => {
   const credentialManager = new CredentialManager(safeStorage);

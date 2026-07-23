@@ -33,12 +33,17 @@ export const AI_PROVIDER_OPTIONS = [
     id: 'ollama',
     label: 'Ollama',
   },
+  {
+    id: 'custom',
+    label: 'Custom (OpenAI Compatible)',
+  },
 ] as const;
 
 export type AiProvider = (typeof AI_PROVIDER_OPTIONS)[number]['id'];
 export type AiProviderSelection = AiProvider | '';
 
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
+export const DEFAULT_CUSTOM_AI_BASE_URL = '';
 export const DEFAULT_USER_NAME = 'Friend';
 export const MAXIMUM_USER_NAME_LENGTH = 30;
 export const MAXIMUM_STICKY_MESSAGE_LENGTH = 120;
@@ -91,6 +96,113 @@ export const isValidAiEndpoint = (value: string): boolean => {
   }
 };
 
+const parseIPv4Address = (hostname: string): readonly number[] | null => {
+  const segments = hostname.split('.');
+
+  if (segments.length !== 4) {
+    return null;
+  }
+
+  const octets = segments.map((segment) => {
+    if (!/^(?:0|[1-9]\d{0,2})$/.test(segment)) {
+      return Number.NaN;
+    }
+
+    return Number(segment);
+  });
+
+  return octets.every((octet) => Number.isInteger(octet) && octet <= 255)
+    ? octets
+    : null;
+};
+
+const isPrivateLanIPv4Address = (hostname: string): boolean => {
+  const octets = parseIPv4Address(hostname);
+
+  if (octets === null) {
+    return false;
+  }
+
+  const first = octets[0];
+  const second = octets[1];
+
+  return (
+    (first === 10) ||
+    (first === 172 && second !== undefined && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
+};
+
+const isPrivateLanIPv6Address = (hostname: string): boolean => {
+  const normalizedHostname = hostname
+    .replace(/^\[/, '')
+    .replace(/\]$/, '')
+    .toLowerCase();
+  const firstSegment = normalizedHostname.split(':')[0];
+
+  if (firstSegment === undefined || !/^[0-9a-f]{1,4}$/.test(firstSegment)) {
+    return false;
+  }
+
+  const firstValue = Number.parseInt(firstSegment, 16);
+  return (firstValue & 0xfe00) === 0xfc00;
+};
+
+const isAllowedInsecureCustomAiHost = (hostname: string): boolean => {
+  const normalizedHostname = hostname.toLowerCase();
+
+  return (
+    normalizedHostname === 'localhost' ||
+    normalizedHostname === '127.0.0.1' ||
+    normalizedHostname === '[::1]' ||
+    normalizedHostname === '::1' ||
+    isPrivateLanIPv4Address(normalizedHostname) ||
+    isPrivateLanIPv6Address(normalizedHostname)
+  );
+};
+
+export const normalizeOpenAICompatibleBaseUrl = (
+  value: unknown,
+): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  if (normalizedValue.length === 0) {
+    return null;
+  }
+
+  try {
+    const baseUrl = new URL(normalizedValue);
+
+    if (
+      (baseUrl.protocol !== 'http:' && baseUrl.protocol !== 'https:') ||
+      baseUrl.username.length > 0 ||
+      baseUrl.password.length > 0 ||
+      baseUrl.search.length > 0 ||
+      baseUrl.hash.length > 0 ||
+      (baseUrl.protocol === 'http:' &&
+        !isAllowedInsecureCustomAiHost(baseUrl.hostname))
+    ) {
+      return null;
+    }
+
+    const pathname =
+      baseUrl.pathname === '/'
+        ? ''
+        : baseUrl.pathname.replace(/\/+$/, '');
+
+    return `${baseUrl.protocol}//${baseUrl.host}${pathname}`;
+  } catch {
+    return null;
+  }
+};
+
+export const isValidOpenAICompatibleBaseUrl = (value: string): boolean =>
+  normalizeOpenAICompatibleBaseUrl(value) !== null;
+
 export interface GeneralSettings {
   readonly alwaysOnTop: boolean;
   readonly launchAtStartup: boolean;
@@ -108,6 +220,7 @@ export interface AiSettings {
   readonly model: string;
   readonly apiKeyConfigured: boolean;
   readonly endpoint: string;
+  readonly baseUrl: string;
 }
 
 export interface AppSettings {
@@ -132,6 +245,7 @@ export interface PreferencesAiSettings {
   readonly model: string;
   readonly apiKeyConfigured: boolean;
   readonly endpoint: string;
+  readonly baseUrl: string;
 }
 
 // This DTO is restricted to the Preferences window. Credentials are redacted.
@@ -158,6 +272,7 @@ export interface AiSettingsPatch {
   readonly provider?: AiProviderSelection;
   readonly model?: string;
   readonly endpoint?: string;
+  readonly baseUrl?: string;
 }
 
 export interface SettingsPatch {
@@ -199,6 +314,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     model: '',
     apiKeyConfigured: false,
     endpoint: DEFAULT_OLLAMA_ENDPOINT,
+    baseUrl: DEFAULT_CUSTOM_AI_BASE_URL,
   },
 };
 
@@ -214,12 +330,21 @@ const AI_SETTING_KEYS = [
   'model',
   'apiKeyConfigured',
   'endpoint',
+  'baseUrl',
+] as const;
+const REQUIRED_AI_SETTING_KEYS = [
+  'enabled',
+  'provider',
+  'model',
+  'apiKeyConfigured',
+  'endpoint',
 ] as const;
 const AI_PATCH_KEYS = [
   'enabled',
   'provider',
   'model',
   'endpoint',
+  'baseUrl',
 ] as const;
 const AI_CONFIGURATION_KEYS = [...AI_PATCH_KEYS, 'apiKey'] as const;
 const ROOT_SETTING_KEYS = [
@@ -305,7 +430,7 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
     return null;
   }
 
-  const { enabled, provider, model, endpoint } = value;
+  const { enabled, provider, model, endpoint, baseUrl } = value;
 
   if (
     (enabled !== undefined && typeof enabled !== 'boolean') ||
@@ -317,7 +442,12 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
     (endpoint !== undefined &&
       (typeof endpoint !== 'string' ||
         endpoint.length > MAXIMUM_ENDPOINT_LENGTH ||
-        !isValidAiEndpoint(endpoint)))
+        !isValidAiEndpoint(endpoint))) ||
+    (baseUrl !== undefined &&
+      (typeof baseUrl !== 'string' ||
+        baseUrl.length > MAXIMUM_ENDPOINT_LENGTH ||
+        (baseUrl.length > 0 &&
+          !isValidOpenAICompatibleBaseUrl(baseUrl))))
   ) {
     return null;
   }
@@ -327,6 +457,7 @@ const parseAiPatch = (value: unknown): AiSettingsPatch | null => {
     ...(provider === '' || isAiProvider(provider) ? { provider } : {}),
     ...(typeof model === 'string' ? { model } : {}),
     ...(typeof endpoint === 'string' ? { endpoint } : {}),
+    ...(typeof baseUrl === 'string' ? { baseUrl } : {}),
   };
 };
 
@@ -482,6 +613,7 @@ export const toPreferencesSettings = (
     model: settings.ai.model,
     apiKeyConfigured: settings.ai.apiKeyConfigured,
     endpoint: settings.ai.endpoint,
+    baseUrl: settings.ai.baseUrl,
   },
 });
 
@@ -522,7 +654,7 @@ export const parseSettings = (value: unknown): AppSettings | null => {
     !hasOnlyKeys(value.water, WATER_SETTING_KEYS) ||
     !hasEveryKey(value.water, WATER_SETTING_KEYS) ||
     !hasOnlyKeys(value.ai, AI_SETTING_KEYS) ||
-    !hasEveryKey(value.ai, AI_SETTING_KEYS) ||
+    !hasEveryKey(value.ai, REQUIRED_AI_SETTING_KEYS) ||
     typeof value.ai.apiKeyConfigured !== 'boolean'
   ) {
     return null;

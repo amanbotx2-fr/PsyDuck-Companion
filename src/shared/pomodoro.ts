@@ -3,7 +3,7 @@ export const DEFAULT_POMODORO_DURATION_MINUTES = 25;
 export const MINIMUM_POMODORO_DURATION_MINUTES = 1;
 export const MAXIMUM_POMODORO_DURATION_MINUTES = 720;
 export const POMODORO_COMPLETION_MESSAGE =
-  '🎉 Focus Complete!\n\nTake a short break.';
+  'Focus complete.\n\nTake a short break.';
 
 export type PomodoroPresetDuration =
   (typeof POMODORO_DURATION_OPTIONS)[number];

@@ -25,7 +25,6 @@ export function PomodoroWidget({ state }: PomodoroWidgetProps) {
       aria-label={`${statusLabel} timer, ${formattedTime} remaining`}
     >
       <span className="pomodoro-widget__label">
-        <span aria-hidden="true">🍅</span>
         {statusLabel}
       </span>
       <time

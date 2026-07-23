@@ -34,7 +34,7 @@ export const DEFAULT_PERSONALITY_MESSAGES = {
     'Reading that...',
   ],
   hydration: [
-    '💧 Time for some water.',
+    'Time for some water.',
     'Stay hydrated!',
     'Tiny reminder: drink some water.',
     'Water first, code later.',
@@ -71,7 +71,7 @@ export const DEFAULT_PERSONALITY_MESSAGES = {
     'All set!',
   ],
   pomodoroComplete: [
-    '🎉 Focus complete!\n\nTake a short break.',
+    'Focus complete.\n\nTake a short break.',
     'Focus session finished. Time to recharge.',
     'Nice focus! Give your brain a quick break.',
     'Timer complete. Stretch, breathe, and reset.',

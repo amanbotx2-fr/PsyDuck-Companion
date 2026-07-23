@@ -1,4 +1,8 @@
-import type { AIModel, AIResponse } from '../ai/AIProvider';
+import type {
+  AIModel,
+  AIProviderHttpDiagnostics,
+  AIResponse,
+} from '../ai/AIProvider';
 import type { DailyPlannerBriefing } from './dailyPlanner';
 import type {
   PomodoroCompletionListener,
@@ -65,6 +69,7 @@ export type AIConnectionTestResult =
   | {
       readonly ok: false;
       readonly message: string;
+      readonly diagnostics?: AIProviderHttpDiagnostics;
     };
 
 export interface CompanionBridge {

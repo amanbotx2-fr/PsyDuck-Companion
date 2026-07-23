@@ -9,6 +9,17 @@ import { normalizeModels, toProviderError } from './providerUtils';
 
 const XAI_API_BASE_URL = 'https://api.x.ai/v1';
 
+interface GrokProviderOptions {
+  readonly baseURL?: string;
+}
+
+const createModelsRequestUrl = (baseURL: string): string => {
+  const normalizedBaseURL = baseURL.endsWith('/')
+    ? baseURL
+    : `${baseURL}/`;
+  return new URL('models', normalizedBaseURL).toString();
+};
+
 interface XAILanguageModel {
   readonly id?: string;
   readonly aliases?: readonly string[];
@@ -20,8 +31,12 @@ interface XAILanguageModelsResponse {
 }
 
 export class GrokProvider extends OpenAICompatibleProvider {
-  public constructor() {
-    super('grok', 'Grok', XAI_API_BASE_URL);
+  public constructor(options: GrokProviderOptions = {}) {
+    const baseURL = options.baseURL ?? XAI_API_BASE_URL;
+    super('grok', 'Grok', {
+      baseURL,
+      connectionTestRequestUrl: createModelsRequestUrl(baseURL),
+    });
   }
 
   public override async listModels(

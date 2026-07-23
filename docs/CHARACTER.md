@@ -104,16 +104,4 @@ Only uses:
 
 !
 
-Tiny emoji-like speech bubbles.
-
-Examples:
-
-💧
-
-💤
-
-✨
-
-❓
-
-🎉
+Short text bubbles.
