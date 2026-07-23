@@ -28,6 +28,7 @@ export type RuntimeSettingsChangeListener = (
   settings: RuntimeSettings,
 ) => void;
 export type UserNamePanelRequestListener = () => void;
+export type StickyMessagePanelRequestListener = () => void;
 export type ReminderCreationPanelRequestListener = () => void;
 export type ReminderManagerPanelRequestListener = () => void;
 export type ReminderFiredListener = (
@@ -73,8 +74,14 @@ export interface CompanionBridge {
   readonly showCompanionContextMenu: () => void;
   readonly getRuntimeSettings: () => Promise<RuntimeSettings>;
   readonly updateUserName: (name: string) => Promise<string>;
+  readonly updateStickyMessage: (
+    message: string | null,
+  ) => Promise<string | null>;
   readonly onUserNamePanelRequested: (
     listener: UserNamePanelRequestListener,
+  ) => () => void;
+  readonly onStickyMessagePanelRequested: (
+    listener: StickyMessagePanelRequestListener,
   ) => () => void;
   readonly onReminderCreationPanelRequested: (
     listener: ReminderCreationPanelRequestListener,

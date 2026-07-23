@@ -6,8 +6,11 @@ export const IPC_CHANNELS = {
   showCompanionContextMenu: 'psyduck:show-context-menu',
   getRuntimeSettings: 'runtime-settings:get',
   updateUserName: 'runtime-settings:update-user-name',
+  updateStickyMessage: 'runtime-settings:update-sticky-message',
   runtimeSettingsChanged: 'runtime-settings:changed',
   userNamePanelRequested: 'personal-assistant:user-name-requested',
+  stickyMessagePanelRequested:
+    'personal-assistant:sticky-message-requested',
   reminderCreationPanelRequested:
     'reminders:creation-panel-requested',
   reminderManagerPanelRequested:

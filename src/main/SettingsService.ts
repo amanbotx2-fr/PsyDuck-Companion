@@ -29,6 +29,7 @@ interface ParsedSettingsDocument {
 
 const ROOT_KEYS = [
   'userName',
+  'stickyMessage',
   'reminders',
   'general',
   'water',
@@ -86,6 +87,7 @@ const serializeSettings = (
   legacyApiKey: string | null,
 ): Record<string, unknown> => ({
   userName: settings.userName,
+  stickyMessage: settings.stickyMessage,
   reminders: settings.reminders.map((reminder) => ({ ...reminder })),
   general: { ...settings.general },
   water: { ...settings.water },
@@ -130,6 +132,9 @@ const parseSettingsDocument = (
     ...(value.userName === undefined
       ? {}
       : { userName: value.userName }),
+    ...(value.stickyMessage === undefined
+      ? {}
+      : { stickyMessage: value.stickyMessage }),
     ...(value.reminders === undefined
       ? {}
       : { reminders: value.reminders }),

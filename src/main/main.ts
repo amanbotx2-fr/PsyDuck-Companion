@@ -34,6 +34,7 @@ import {
 } from '../shared/reminders';
 import {
   type AiProviderSelection,
+  normalizeStickyMessage,
   normalizeUserName,
   parseAiConfigurationUpdate,
   parsePreferencesSettingsPatch,
@@ -532,6 +533,31 @@ const requestUserName = (): void => {
   }
 };
 
+const requestStickyMessage = (): void => {
+  const targetWindow = openMainWindow();
+  targetWindow.show();
+  targetWindow.focus();
+
+  const sendRequest = (): void => {
+    if (
+      targetWindow.isDestroyed() ||
+      targetWindow.webContents.isDestroyed()
+    ) {
+      return;
+    }
+
+    targetWindow.webContents.send(
+      IPC_CHANNELS.stickyMessagePanelRequested,
+    );
+  };
+
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.once('did-finish-load', sendRequest);
+  } else {
+    sendRequest();
+  }
+};
+
 const requestReminderCreation = (): void => {
   const targetWindow = openMainWindow();
   targetWindow.show();
@@ -603,6 +629,7 @@ const getMenuActions = (): ApplicationMenuActions => ({
   },
   requestCustomPomodoroDuration,
   requestUserName,
+  requestStickyMessage,
   requestReminderCreation,
   requestReminderManagement,
 });
@@ -674,6 +701,23 @@ const handleUpdateUserName = async (
 
   const settings = await getSettingsService().update({ userName });
   return settings.userName;
+};
+
+const handleUpdateStickyMessage = async (
+  _event: IpcMainInvokeEvent,
+  value: unknown,
+): Promise<string | null> => {
+  const stickyMessage =
+    value === null ? null : normalizeStickyMessage(value);
+
+  if (value !== null && stickyMessage === null) {
+    throw new TypeError('Invalid sticky message.');
+  }
+
+  const settings = await getSettingsService().update({
+    stickyMessage,
+  });
+  return settings.stickyMessage;
 };
 
 const handleCreateReminder = (
@@ -1016,6 +1060,13 @@ const registerIpcHandlers = (): void => {
     ),
   );
   ipcMain.handle(
+    IPC_CHANNELS.updateStickyMessage,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.updateStickyMessage,
+      handleUpdateStickyMessage,
+    ),
+  );
+  ipcMain.handle(
     IPC_CHANNELS.startPomodoro,
     ipcAuthorizer.protectInvoke(
       IPC_CHANNELS.startPomodoro,
@@ -1122,6 +1173,7 @@ const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.getCursorPosition);
   ipcMain.removeHandler(IPC_CHANNELS.getRuntimeSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updateUserName);
+  ipcMain.removeHandler(IPC_CHANNELS.updateStickyMessage);
   ipcMain.removeHandler(IPC_CHANNELS.startPomodoro);
   ipcMain.removeHandler(IPC_CHANNELS.createReminder);
   ipcMain.removeHandler(IPC_CHANNELS.updateReminder);

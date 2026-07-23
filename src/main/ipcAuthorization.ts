@@ -12,6 +12,7 @@ export const RENDERER_CAPABILITIES = {
     IPC_CHANNELS.askAI,
     IPC_CHANNELS.getRuntimeSettings,
     IPC_CHANNELS.updateUserName,
+    IPC_CHANNELS.updateStickyMessage,
     IPC_CHANNELS.moveWindow,
     IPC_CHANNELS.setCompanionContentHeight,
     IPC_CHANNELS.showCompanionContextMenu,

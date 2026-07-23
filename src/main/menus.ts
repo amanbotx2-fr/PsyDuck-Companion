@@ -28,6 +28,7 @@ export interface ApplicationMenuActions {
   readonly stopPomodoro: () => void;
   readonly requestCustomPomodoroDuration: () => void;
   readonly requestUserName: () => void;
+  readonly requestStickyMessage: () => void;
   readonly requestReminderCreation: () => void;
   readonly requestReminderManagement: () => void;
 }
@@ -122,8 +123,15 @@ export const createCompanionContextMenu = (
           label: 'Sticky Message',
           submenu: [
             {
-              label: 'Coming Soon',
-              enabled: false,
+              label: 'Set Sticky Message…',
+              click: actions.requestStickyMessage,
+            },
+            {
+              label: 'Clear Sticky Message',
+              enabled: settings.stickyMessage !== null,
+              click: () => {
+                actions.updateSettings({ stickyMessage: null });
+              },
             },
           ],
         },

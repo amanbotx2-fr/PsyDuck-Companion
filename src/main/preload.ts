@@ -22,6 +22,7 @@ import type {
   ReminderManagerPanelRequestListener,
   RuntimeSettingsChangeListener,
   ScreenPoint,
+  StickyMessagePanelRequestListener,
   UserNamePanelRequestListener,
 } from '../shared/types';
 
@@ -35,8 +36,11 @@ const IPC_CHANNELS = {
   showCompanionContextMenu: 'psyduck:show-context-menu',
   getRuntimeSettings: 'runtime-settings:get',
   updateUserName: 'runtime-settings:update-user-name',
+  updateStickyMessage: 'runtime-settings:update-sticky-message',
   runtimeSettingsChanged: 'runtime-settings:changed',
   userNamePanelRequested: 'personal-assistant:user-name-requested',
+  stickyMessagePanelRequested:
+    'personal-assistant:sticky-message-requested',
   reminderCreationPanelRequested:
     'reminders:creation-panel-requested',
   reminderManagerPanelRequested:
@@ -64,6 +68,8 @@ const customPomodoroDurationRequestListeners =
   new Set<PomodoroCustomDurationRequestListener>();
 const userNamePanelRequestListeners =
   new Set<UserNamePanelRequestListener>();
+const stickyMessagePanelRequestListeners =
+  new Set<StickyMessagePanelRequestListener>();
 const reminderCreationPanelRequestListeners =
   new Set<ReminderCreationPanelRequestListener>();
 const reminderManagerPanelRequestListeners =
@@ -74,6 +80,7 @@ let latestPomodoroState: PomodoroState | null = null;
 let pendingPomodoroCompletion = false;
 let pendingCustomPomodoroDurationRequest = false;
 let pendingUserNamePanelRequest = false;
+let pendingStickyMessagePanelRequest = false;
 let pendingReminderCreationPanelRequest = false;
 let pendingReminderManagerPanelRequest = false;
 
@@ -84,6 +91,17 @@ ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
   }
 
   for (const listener of userNamePanelRequestListeners) {
+    listener();
+  }
+});
+
+ipcRenderer.on(IPC_CHANNELS.stickyMessagePanelRequested, () => {
+  if (stickyMessagePanelRequestListeners.size === 0) {
+    pendingStickyMessagePanelRequest = true;
+    return;
+  }
+
+  for (const listener of stickyMessagePanelRequestListeners) {
     listener();
   }
 });
@@ -201,6 +219,11 @@ const companionBridge: CompanionBridge = Object.freeze({
     ) as Promise<RuntimeSettings>,
   updateUserName: (name: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.updateUserName, name) as Promise<string>,
+  updateStickyMessage: (message: string | null) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.updateStickyMessage,
+      message,
+    ) as Promise<string | null>,
   onUserNamePanelRequested: (
     listener: UserNamePanelRequestListener,
   ) => {
@@ -217,6 +240,24 @@ const companionBridge: CompanionBridge = Object.freeze({
 
     return () => {
       userNamePanelRequestListeners.delete(listener);
+    };
+  },
+  onStickyMessagePanelRequested: (
+    listener: StickyMessagePanelRequestListener,
+  ) => {
+    stickyMessagePanelRequestListeners.add(listener);
+
+    if (pendingStickyMessagePanelRequest) {
+      queueMicrotask(() => {
+        if (stickyMessagePanelRequestListeners.has(listener)) {
+          pendingStickyMessagePanelRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      stickyMessagePanelRequestListeners.delete(listener);
     };
   },
   onReminderCreationPanelRequested: (

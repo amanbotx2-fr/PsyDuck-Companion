@@ -14,9 +14,11 @@ export const COMPANION_WIDGET_IDS = {
   reminderPanel: 'reminder-panel',
   userNamePanel: 'user-name-panel',
   pomodoroPanel: 'pomodoro-panel',
+  stickyMessagePanel: 'sticky-message-panel',
   reminder: 'reminder',
   ai: 'ai',
   stickyMessage: 'sticky-message',
+  speechBubble: 'speech-bubble',
   pomodoro: 'pomodoro',
 } as const;
 
@@ -28,9 +30,11 @@ const WIDGET_ORDER: Readonly<Record<CompanionWidgetId, number>> = {
   [COMPANION_WIDGET_IDS.reminderPanel]: 90,
   [COMPANION_WIDGET_IDS.userNamePanel]: 100,
   [COMPANION_WIDGET_IDS.pomodoroPanel]: 110,
+  [COMPANION_WIDGET_IDS.stickyMessagePanel]: 120,
   [COMPANION_WIDGET_IDS.reminder]: 150,
   [COMPANION_WIDGET_IDS.ai]: 200,
   [COMPANION_WIDGET_IDS.stickyMessage]: 300,
+  [COMPANION_WIDGET_IDS.speechBubble]: 350,
   [COMPANION_WIDGET_IDS.pomodoro]: 400,
 };
 

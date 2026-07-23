@@ -41,6 +41,7 @@ export type AiProviderSelection = AiProvider | '';
 export const DEFAULT_OLLAMA_ENDPOINT = 'http://localhost:11434';
 export const DEFAULT_USER_NAME = 'Friend';
 export const MAXIMUM_USER_NAME_LENGTH = 30;
+export const MAXIMUM_STICKY_MESSAGE_LENGTH = 120;
 
 export const normalizeUserName = (value: unknown): string | null => {
   if (typeof value !== 'string') {
@@ -51,6 +52,21 @@ export const normalizeUserName = (value: unknown): string | null => {
 
   return normalizedValue.length > 0 &&
     normalizedValue.length <= MAXIMUM_USER_NAME_LENGTH
+    ? normalizedValue
+    : null;
+};
+
+export const normalizeStickyMessage = (
+  value: unknown,
+): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  return normalizedValue.length > 0 &&
+    normalizedValue.length <= MAXIMUM_STICKY_MESSAGE_LENGTH
     ? normalizedValue
     : null;
 };
@@ -96,6 +112,7 @@ export interface AiSettings {
 
 export interface AppSettings {
   readonly userName: string;
+  readonly stickyMessage: string | null;
   readonly reminders: readonly Reminder[];
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
@@ -104,6 +121,7 @@ export interface AppSettings {
 
 export interface RuntimeSettings {
   readonly userName: string;
+  readonly stickyMessage: string | null;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
 }
@@ -144,6 +162,7 @@ export interface AiSettingsPatch {
 
 export interface SettingsPatch {
   readonly userName?: string;
+  readonly stickyMessage?: string | null;
   readonly reminders?: readonly Reminder[];
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
@@ -163,6 +182,7 @@ export interface AiConfigurationUpdate extends AiSettingsPatch {
 
 const DEFAULT_SETTINGS: AppSettings = {
   userName: DEFAULT_USER_NAME,
+  stickyMessage: null,
   reminders: [],
   general: {
     alwaysOnTop: true,
@@ -204,6 +224,7 @@ const AI_PATCH_KEYS = [
 const AI_CONFIGURATION_KEYS = [...AI_PATCH_KEYS, 'apiKey'] as const;
 const ROOT_SETTING_KEYS = [
   'userName',
+  'stickyMessage',
   'reminders',
   'general',
   'water',
@@ -325,6 +346,12 @@ export const parseSettingsPatch = (
     value.userName === undefined
       ? undefined
       : normalizeUserName(value.userName);
+  const stickyMessage =
+    value.stickyMessage === undefined
+      ? undefined
+      : value.stickyMessage === null
+        ? null
+        : normalizeStickyMessage(value.stickyMessage);
   const reminders =
     value.reminders === undefined
       ? undefined
@@ -335,6 +362,9 @@ export const parseSettingsPatch = (
     water === null ||
     ai === null ||
     userName === null ||
+    (value.stickyMessage !== undefined &&
+      value.stickyMessage !== null &&
+      stickyMessage === null) ||
     reminders === null
   ) {
     return null;
@@ -342,6 +372,7 @@ export const parseSettingsPatch = (
 
   return {
     ...(userName === undefined ? {} : { userName }),
+    ...(stickyMessage === undefined ? {} : { stickyMessage }),
     ...(reminders === undefined ? {} : { reminders }),
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
@@ -404,6 +435,10 @@ export const mergeSettings = (
   patch: SettingsPatch,
 ): AppSettings => ({
   userName: patch.userName ?? settings.userName,
+  stickyMessage:
+    patch.stickyMessage === undefined
+      ? settings.stickyMessage
+      : patch.stickyMessage,
   reminders: (patch.reminders ?? settings.reminders).map(cloneReminder),
   general: {
     ...settings.general,
@@ -426,9 +461,13 @@ export const cloneSettings = (settings: AppSettings): AppSettings =>
   mergeSettings(settings, {});
 
 export const toRuntimeSettings = (
-  settings: Pick<AppSettings, 'userName' | 'general' | 'water'>,
+  settings: Pick<
+    AppSettings,
+    'userName' | 'stickyMessage' | 'general' | 'water'
+  >,
 ): RuntimeSettings => ({
   userName: settings.userName,
+  stickyMessage: settings.stickyMessage,
   general: { ...settings.general },
   water: { ...settings.water },
 });
@@ -492,6 +531,7 @@ export const parseSettings = (value: unknown): AppSettings | null => {
   const { apiKeyConfigured, ...aiPatchValue } = value.ai;
   const patch = parseSettingsPatch({
     userName: value.userName,
+    stickyMessage: value.stickyMessage,
     reminders: value.reminders,
     general: value.general,
     water: value.water,

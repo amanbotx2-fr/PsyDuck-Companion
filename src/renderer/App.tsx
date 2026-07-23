@@ -46,6 +46,11 @@ import {
 import { ReminderWidget } from './components/ReminderWidget';
 import { SpeechBubble } from './components/SpeechBubble';
 import {
+  StickyMessagePanel,
+  type StickyMessagePanelDismissReason,
+} from './components/StickyMessagePanel';
+import { StickyMessageWidget } from './components/StickyMessageWidget';
+import {
   UserNamePanel,
   type UserNamePanelDismissReason,
 } from './components/UserNamePanel';
@@ -65,6 +70,7 @@ const BLINK_BEHAVIOR_PRIORITY = 100;
 const MINIMUM_BLINK_INTERVAL_MS = 4_000;
 const MAXIMUM_BLINK_INTERVAL_MS = 8_000;
 const MINIMUM_THINKING_DURATION_MS = 350;
+const CHAT_INPUT_CLOSE_TRANSITION_MS = 200;
 const AI_RESPONSE_DURATION_MS = 5_000;
 const POMODORO_COMPLETION_DURATION_MS = 5_000;
 const POMODORO_CELEBRATION_DURATION_MS = 900;
@@ -104,6 +110,9 @@ export function App() {
   const responseDelayTimerRef = useRef<ReturnType<
     typeof globalThis.setTimeout
   > | null>(null);
+  const chatInputCloseTimerRef = useRef<ReturnType<
+    typeof globalThis.setTimeout
+  > | null>(null);
   const celebrationTimerRef = useRef<ReturnType<
     typeof globalThis.setTimeout
   > | null>(null);
@@ -113,6 +122,7 @@ export function App() {
   const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
     INITIAL_AI_INTERACTION_STATE,
   );
+  const [chatInputPresent, setChatInputPresent] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
   const [customPomodoroPanelOpen, setCustomPomodoroPanelOpen] =
     useState(false);
@@ -127,6 +137,14 @@ export function App() {
     useState(false);
   const [userNamePanelRequestSequence, setUserNamePanelRequestSequence] =
     useState(0);
+  const [stickyMessagePanelOpen, setStickyMessagePanelOpen] =
+    useState(false);
+  const [stickyMessagePanelPresent, setStickyMessagePanelPresent] =
+    useState(false);
+  const [
+    stickyMessagePanelRequestSequence,
+    setStickyMessagePanelRequestSequence,
+  ] = useState(0);
   const [reminderPanelOpen, setReminderPanelOpen] = useState(false);
   const [reminderPanelPresent, setReminderPanelPresent] =
     useState(false);
@@ -219,11 +237,31 @@ export function App() {
     [showAIResponse],
   );
 
+  const scheduleChatInputUnmount = useCallback((): void => {
+    if (chatInputCloseTimerRef.current !== null) {
+      globalThis.clearTimeout(chatInputCloseTimerRef.current);
+    }
+
+    chatInputCloseTimerRef.current = globalThis.setTimeout(() => {
+      chatInputCloseTimerRef.current = null;
+
+      if (mountedRef.current) {
+        setChatInputPresent(false);
+      }
+    }, CHAT_INPUT_CLOSE_TRANSITION_MS);
+  }, []);
+
   const handlePsyDuckActivate = useCallback((): void => {
     if (aiInteractionRef.current.phase !== 'idle') {
       return;
     }
 
+    if (chatInputCloseTimerRef.current !== null) {
+      globalThis.clearTimeout(chatInputCloseTimerRef.current);
+      chatInputCloseTimerRef.current = null;
+    }
+
+    setChatInputPresent(true);
     submissionInProgressRef.current = false;
     speechBubble.clearQueue();
     speechBubble.hide();
@@ -242,8 +280,9 @@ export function App() {
 
       submissionInProgressRef.current = false;
       transitionAIInteraction({ phase: 'idle' });
+      scheduleChatInputUnmount();
     },
-    [transitionAIInteraction],
+    [scheduleChatInputUnmount, transitionAIInteraction],
   );
 
   const handleChatInputSubmit = useCallback(
@@ -271,6 +310,7 @@ export function App() {
         requestId,
         startedAt,
       });
+      scheduleChatInputUnmount();
       speechBubble.clearQueue();
       speechBubble.hide();
       speechBubble.show(personalityService.getThinkingMessage(), {
@@ -308,6 +348,7 @@ export function App() {
     },
     [
       scheduleAIResponse,
+      scheduleChatInputUnmount,
       speechBubble.clearQueue,
       speechBubble.hide,
       speechBubble.show,
@@ -372,6 +413,31 @@ export function App() {
 
   const handleUserNamePanelAfterClose = useCallback((): void => {
     setUserNamePanelPresent(false);
+  }, []);
+
+  const handleStickyMessagePanelDismiss = useCallback(
+    (_reason: StickyMessagePanelDismissReason): void => {
+      setStickyMessagePanelOpen(false);
+    },
+    [],
+  );
+
+  const handleStickyMessageSave = useCallback(
+    async (message: string): Promise<void> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      await bridge.updateStickyMessage(message);
+      setStickyMessagePanelOpen(false);
+    },
+    [],
+  );
+
+  const handleStickyMessagePanelAfterClose = useCallback((): void => {
+    setStickyMessagePanelPresent(false);
   }, []);
 
   const openReminderManager = useCallback((): void => {
@@ -491,6 +557,11 @@ export function App() {
         responseDelayTimerRef.current = null;
       }
 
+      if (chatInputCloseTimerRef.current !== null) {
+        globalThis.clearTimeout(chatInputCloseTimerRef.current);
+        chatInputCloseTimerRef.current = null;
+      }
+
       if (celebrationTimerRef.current !== null) {
         globalThis.clearTimeout(celebrationTimerRef.current);
         celebrationTimerRef.current = null;
@@ -582,6 +653,22 @@ export function App() {
       setUserNamePanelRequestSequence((sequence) => sequence + 1);
       setUserNamePanelPresent(true);
       setUserNamePanelOpen(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onStickyMessagePanelRequested(() => {
+      setStickyMessagePanelRequestSequence(
+        (sequence) => sequence + 1,
+      );
+      setStickyMessagePanelPresent(true);
+      setStickyMessagePanelOpen(true);
     });
   }, []);
 
@@ -766,10 +853,6 @@ export function App() {
     };
   }, [speechBubble.clearQueue, speechBubble.hide, speechBubble.show]);
 
-  const aiWidgetVisible =
-    aiInteraction.phase === 'input-open' ||
-    speechBubble.currentMessage !== null;
-
   const psyDuckAnchor = (
     <div
       className="psyduck-anchor"
@@ -791,6 +874,7 @@ export function App() {
       data-pomodoro-running={pomodoroState.running}
       data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
       data-user-name-panel-open={userNamePanelOpen}
+      data-sticky-message-panel-open={stickyMessagePanelOpen}
       data-reminder-panel-open={reminderPanelOpen}
       data-reminder-manager-open={reminderManagerOpen}
       data-reminder-widget-visible={
@@ -859,6 +943,20 @@ export function App() {
             />
           </CompanionWidget>
         ) : null}
+        {stickyMessagePanelPresent ? (
+          <CompanionWidget
+            id={COMPANION_WIDGET_IDS.stickyMessagePanel}
+          >
+            <StickyMessagePanel
+              key={stickyMessagePanelRequestSequence}
+              open={stickyMessagePanelOpen}
+              defaultMessage={settings.stickyMessage ?? ''}
+              onDismiss={handleStickyMessagePanelDismiss}
+              onSave={handleStickyMessageSave}
+              onAfterClose={handleStickyMessagePanelAfterClose}
+            />
+          </CompanionWidget>
+        ) : null}
         {reminderNotifications.current === null ? null : (
           <CompanionWidget id={COMPANION_WIDGET_IDS.reminder}>
             <ReminderWidget
@@ -871,20 +969,11 @@ export function App() {
             />
           </CompanionWidget>
         )}
-        {aiWidgetVisible ? (
+        {chatInputPresent ? (
           <CompanionWidget
             id={COMPANION_WIDGET_IDS.ai}
             className="companion-widget--ai"
           >
-            {aiInteraction.phase === 'input-open' ? null : (
-              <SpeechBubble
-                message={speechBubble.currentMessage}
-                visibility={speechBubble.visibility}
-                onExitTransitionEnd={
-                  speechBubble.notifyExitTransitionEnd
-                }
-              />
-            )}
             <ChatInputBubble
               open={aiInteraction.phase === 'input-open'}
               onCancel={handleChatInputCancel}
@@ -892,6 +981,22 @@ export function App() {
             />
           </CompanionWidget>
         ) : null}
+        {settings.stickyMessage === null ? null : (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.stickyMessage}>
+            <StickyMessageWidget message={settings.stickyMessage} />
+          </CompanionWidget>
+        )}
+        {speechBubble.currentMessage === null ? null : (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.speechBubble}>
+            <SpeechBubble
+              message={speechBubble.currentMessage}
+              visibility={speechBubble.visibility}
+              onExitTransitionEnd={
+                speechBubble.notifyExitTransitionEnd
+              }
+            />
+          </CompanionWidget>
+        )}
         {pomodoroState.running ? (
           <CompanionWidget id={COMPANION_WIDGET_IDS.pomodoro}>
             <PomodoroWidget state={pomodoroState} />
