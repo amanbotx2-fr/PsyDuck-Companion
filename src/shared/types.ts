@@ -27,6 +27,7 @@ export type RuntimeSettingsChangeListener = (
   settings: RuntimeSettings,
 ) => void;
 export type UserNamePanelRequestListener = () => void;
+export type ReminderCreationPanelRequestListener = () => void;
 
 export type AIAskResult =
   | {
@@ -69,6 +70,9 @@ export interface CompanionBridge {
   readonly updateUserName: (name: string) => Promise<string>;
   readonly onUserNamePanelRequested: (
     listener: UserNamePanelRequestListener,
+  ) => () => void;
+  readonly onReminderCreationPanelRequested: (
+    listener: ReminderCreationPanelRequestListener,
   ) => () => void;
   readonly askAI: (prompt: string) => Promise<AIAskResult>;
   readonly startPomodoro: (durationMinutes: number) => Promise<void>;

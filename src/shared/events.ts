@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   updateUserName: 'runtime-settings:update-user-name',
   runtimeSettingsChanged: 'runtime-settings:changed',
   userNamePanelRequested: 'personal-assistant:user-name-requested',
+  reminderCreationPanelRequested:
+    'reminders:creation-panel-requested',
   getPreferencesSettings: 'preferences-settings:get',
   updatePreferencesSettings: 'preferences-settings:update',
   updateAiConfiguration: 'preferences-ai:configure',

@@ -16,6 +16,7 @@ import type {
   AIAskResult,
   CompanionBridge,
   CursorPositionListener,
+  ReminderCreationPanelRequestListener,
   RuntimeSettingsChangeListener,
   ScreenPoint,
   UserNamePanelRequestListener,
@@ -33,6 +34,8 @@ const IPC_CHANNELS = {
   updateUserName: 'runtime-settings:update-user-name',
   runtimeSettingsChanged: 'runtime-settings:changed',
   userNamePanelRequested: 'personal-assistant:user-name-requested',
+  reminderCreationPanelRequested:
+    'reminders:creation-panel-requested',
   askAI: 'ai:ask',
   startPomodoro: 'pomodoro:start',
   customPomodoroPanelClosed: 'pomodoro:custom-panel-closed',
@@ -55,10 +58,13 @@ const customPomodoroDurationRequestListeners =
   new Set<PomodoroCustomDurationRequestListener>();
 const userNamePanelRequestListeners =
   new Set<UserNamePanelRequestListener>();
+const reminderCreationPanelRequestListeners =
+  new Set<ReminderCreationPanelRequestListener>();
 let latestPomodoroState: PomodoroState | null = null;
 let pendingPomodoroCompletion = false;
 let pendingCustomPomodoroDurationRequest = false;
 let pendingUserNamePanelRequest = false;
+let pendingReminderCreationPanelRequest = false;
 
 ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
   if (userNamePanelRequestListeners.size === 0) {
@@ -67,6 +73,17 @@ ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
   }
 
   for (const listener of userNamePanelRequestListeners) {
+    listener();
+  }
+});
+
+ipcRenderer.on(IPC_CHANNELS.reminderCreationPanelRequested, () => {
+  if (reminderCreationPanelRequestListeners.size === 0) {
+    pendingReminderCreationPanelRequest = true;
+    return;
+  }
+
+  for (const listener of reminderCreationPanelRequestListeners) {
     listener();
   }
 });
@@ -159,6 +176,24 @@ const companionBridge: CompanionBridge = Object.freeze({
 
     return () => {
       userNamePanelRequestListeners.delete(listener);
+    };
+  },
+  onReminderCreationPanelRequested: (
+    listener: ReminderCreationPanelRequestListener,
+  ) => {
+    reminderCreationPanelRequestListeners.add(listener);
+
+    if (pendingReminderCreationPanelRequest) {
+      queueMicrotask(() => {
+        if (reminderCreationPanelRequestListeners.has(listener)) {
+          pendingReminderCreationPanelRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      reminderCreationPanelRequestListeners.delete(listener);
     };
   },
   askAI: (prompt: string) =>

@@ -415,6 +415,14 @@ body {
   box-shadow: 0 0 0 2px rgb(150 42 38 / 12%);
 }
 
+.floating-companion-panel__textarea {
+  height: 58px;
+  min-height: 58px;
+  padding-block: 8px;
+  line-height: 18px;
+  resize: none;
+}
+
 .floating-companion-panel__feedback {
   min-height: 16px;
   margin: 4px 0 10px;
@@ -494,6 +502,27 @@ body {
 
 .user-name-panel__input {
   text-align: left;
+}
+
+.reminder-creation-panel__field {
+  display: grid;
+  margin-bottom: 9px;
+}
+
+.reminder-creation-panel__field
+  .floating-companion-panel__label {
+  margin-bottom: 4px;
+}
+
+.reminder-creation-panel__date-input,
+.reminder-creation-panel__time-input {
+  color-scheme: light;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.reminder-creation-panel__feedback {
+  margin-top: -3px;
 }
 
 .psyduck-stage {

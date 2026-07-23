@@ -479,6 +479,31 @@ const requestUserName = (): void => {
   }
 };
 
+const requestReminderCreation = (): void => {
+  const targetWindow = openMainWindow();
+  targetWindow.show();
+  targetWindow.focus();
+
+  const sendRequest = (): void => {
+    if (
+      targetWindow.isDestroyed() ||
+      targetWindow.webContents.isDestroyed()
+    ) {
+      return;
+    }
+
+    targetWindow.webContents.send(
+      IPC_CHANNELS.reminderCreationPanelRequested,
+    );
+  };
+
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.once('did-finish-load', sendRequest);
+  } else {
+    sendRequest();
+  }
+};
+
 const getMenuActions = (): ApplicationMenuActions => ({
   showCompanion: showMainWindow,
   openPreferences,
@@ -500,6 +525,7 @@ const getMenuActions = (): ApplicationMenuActions => ({
   },
   requestCustomPomodoroDuration,
   requestUserName,
+  requestReminderCreation,
 });
 
 const handleShowCompanionContextMenu = (

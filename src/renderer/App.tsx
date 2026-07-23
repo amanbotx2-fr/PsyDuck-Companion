@@ -8,6 +8,7 @@ import {
 import { WaterReminder } from '../engine/WaterReminder';
 import { personalityService } from '../personality';
 import { POMODORO_COMPLETION_MESSAGE } from '../shared/pomodoro';
+import type { CreateReminderInput } from '../shared/reminders';
 import { DEFAULT_USER_NAME } from '../shared/settings';
 import {
   PsyDuck,
@@ -27,6 +28,10 @@ import {
   type PomodoroDurationPanelDismissReason,
 } from './components/PomodoroDurationPanel';
 import { PomodoroWidget } from './components/PomodoroWidget';
+import {
+  ReminderCreationPanel,
+  type ReminderCreationPanelDismissReason,
+} from './components/ReminderCreationPanel';
 import { SpeechBubble } from './components/SpeechBubble';
 import {
   UserNamePanel,
@@ -107,6 +112,11 @@ export function App() {
   const [userNamePanelPresent, setUserNamePanelPresent] =
     useState(false);
   const [userNamePanelRequestSequence, setUserNamePanelRequestSequence] =
+    useState(0);
+  const [reminderPanelOpen, setReminderPanelOpen] = useState(false);
+  const [reminderPanelPresent, setReminderPanelPresent] =
+    useState(false);
+  const [reminderPanelRequestSequence, setReminderPanelRequestSequence] =
     useState(0);
   const pomodoroState = usePomodoroState();
   const settings = useRuntimeSettings();
@@ -337,6 +347,33 @@ export function App() {
     setUserNamePanelPresent(false);
   }, []);
 
+  const handleReminderPanelDismiss = useCallback(
+    (_reason: ReminderCreationPanelDismissReason): void => {
+      setReminderPanelOpen(false);
+    },
+    [],
+  );
+
+  const handleReminderSave = useCallback(
+    async (input: CreateReminderInput): Promise<void> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      await bridge.createReminder(input);
+      setReminderPanelOpen(false);
+      const userName = settings.userName.trim() || DEFAULT_USER_NAME;
+      speechBubble.show(`Got it, ${userName}! I'll remind you.`);
+    },
+    [settings.userName, speechBubble.show],
+  );
+
+  const handleReminderPanelAfterClose = useCallback((): void => {
+    setReminderPanelPresent(false);
+  }, []);
+
   const handleContentHeightChange = useCallback((height: number): void => {
     window.psyduck?.setCompanionContentHeight(height);
   }, []);
@@ -398,6 +435,20 @@ export function App() {
       );
       setCustomPomodoroPanelPresent(true);
       setCustomPomodoroPanelOpen(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onReminderCreationPanelRequested(() => {
+      setReminderPanelRequestSequence((sequence) => sequence + 1);
+      setReminderPanelPresent(true);
+      setReminderPanelOpen(true);
     });
   }, []);
 
@@ -621,12 +672,24 @@ export function App() {
       data-pomodoro-running={pomodoroState.running}
       data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
       data-user-name-panel-open={userNamePanelOpen}
+      data-reminder-panel-open={reminderPanelOpen}
       aria-label="PsyDuck desktop companion"
     >
       <CompanionWidgetStack
         anchor={psyDuckAnchor}
         onContentHeightChange={handleContentHeightChange}
       >
+        {reminderPanelPresent ? (
+          <CompanionWidget id={COMPANION_WIDGET_IDS.reminderPanel}>
+            <ReminderCreationPanel
+              key={reminderPanelRequestSequence}
+              open={reminderPanelOpen}
+              onDismiss={handleReminderPanelDismiss}
+              onSave={handleReminderSave}
+              onAfterClose={handleReminderPanelAfterClose}
+            />
+          </CompanionWidget>
+        ) : null}
         {userNamePanelPresent ? (
           <CompanionWidget id={COMPANION_WIDGET_IDS.userNamePanel}>
             <UserNamePanel
