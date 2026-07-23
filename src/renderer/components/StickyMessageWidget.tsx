@@ -10,12 +10,6 @@ export function StickyMessageWidget({
       className="sticky-message-widget"
       aria-label="Sticky message"
     >
-      <span
-        className="sticky-message-widget__icon"
-        aria-hidden="true"
-      >
-        📌
-      </span>
       <p className="sticky-message-widget__message">{message}</p>
     </aside>
   );

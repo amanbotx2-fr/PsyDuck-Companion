@@ -17,6 +17,7 @@ export const isAIProviderId = (value: string): value is AIProviderId =>
 
 export interface AIProviderConfiguration {
   readonly apiKey: string;
+  readonly baseUrl: string;
   readonly model: string;
   readonly endpoint: string;
 }
@@ -28,6 +29,15 @@ export interface AIModel {
 
 export interface AIConnectionResult {
   readonly message: string;
+}
+
+export interface AIProviderHttpDiagnostics {
+  readonly requestUrl: string;
+  readonly httpStatusCode: number | null;
+  readonly httpStatusText: string | null;
+  readonly responseBody: string;
+  readonly errorCode: string | null;
+  readonly errorMessage: string;
 }
 
 export interface AIRequest {
@@ -87,19 +97,27 @@ export type AIProviderErrorCode =
   | 'empty_response'
   | 'unsupported_operation';
 
+export interface AIProviderErrorOptions extends ErrorOptions {
+  readonly httpDiagnostics?: AIProviderHttpDiagnostics;
+}
+
 export class AIProviderError extends Error {
   public readonly providerId: AIProviderId;
   public readonly code: AIProviderErrorCode;
+  public readonly httpDiagnostics:
+    | AIProviderHttpDiagnostics
+    | undefined;
 
   public constructor(
     providerId: AIProviderId,
     code: AIProviderErrorCode,
     message: string,
-    options?: ErrorOptions,
+    options?: AIProviderErrorOptions,
   ) {
     super(limitProviderErrorMessage(message), options);
     this.name = 'AIProviderError';
     this.providerId = providerId;
     this.code = code;
+    this.httpDiagnostics = options?.httpDiagnostics;
   }
 }

@@ -70,9 +70,6 @@ export function ReminderWidget({
       aria-busy={snoozing}
     >
       <header className="reminder-widget__header">
-        <span className="reminder-widget__icon" aria-hidden="true">
-          🔔
-        </span>
         <p className="reminder-widget__greeting" id={greetingId}>
           {getGreeting(userName)}
         </p>

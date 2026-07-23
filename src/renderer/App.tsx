@@ -329,7 +329,6 @@ export function App() {
       speechBubble.clearQueue();
       speechBubble.hide();
       speechBubble.show(personalityService.getThinkingMessage(), {
-        icon: '🤔',
         persistent: true,
       });
 

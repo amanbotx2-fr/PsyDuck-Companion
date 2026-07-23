@@ -49,6 +49,7 @@ const STORED_AI_KEYS = [
   'provider',
   'model',
   'endpoint',
+  'baseUrl',
   'apiKey',
 ] as const;
 const REQUIRED_AI_KEYS = ['enabled', 'provider'] as const;
@@ -97,6 +98,9 @@ const serializeSettings = (
     provider: settings.ai.provider,
     model: settings.ai.model,
     endpoint: settings.ai.endpoint,
+    ...(settings.ai.baseUrl.length === 0
+      ? {}
+      : { baseUrl: settings.ai.baseUrl }),
     ...(legacyApiKey === null ? {} : { apiKey: legacyApiKey }),
   },
   credential: protectedCredential,

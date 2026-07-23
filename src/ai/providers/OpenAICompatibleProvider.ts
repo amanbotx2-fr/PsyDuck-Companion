@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 
+import { normalizeOpenAICompatibleBaseUrl } from '../../shared/settings';
 import {
   MAXIMUM_AI_MODEL_CANDIDATES,
   MAXIMUM_AI_OUTPUT_TOKENS,
@@ -21,10 +22,12 @@ import {
   createStreamingUnsupportedError,
   normalizeModels,
   toProviderError,
+  toProviderHttpError,
 } from './providerUtils';
 
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAXIMUM_RETRIES = 1;
+const UNAUTHENTICATED_API_KEY_PLACEHOLDER = 'not-required';
 const OPENAI_NON_TEXT_MODEL_MARKERS = [
   'audio',
   'image',
@@ -35,6 +38,37 @@ const OPENAI_NON_TEXT_MODEL_MARKERS = [
   'tts',
   'whisper',
 ] as const;
+
+type OpenAIRequestProtocol =
+  | 'responses'
+  | 'chat-completions'
+  | 'auto';
+type ResolvedOpenAIRequestProtocol = Exclude<
+  OpenAIRequestProtocol,
+  'auto'
+>;
+
+export interface OpenAICompatibleProviderOptions {
+  readonly apiKeyRequired?: boolean;
+  readonly baseURL?: string;
+  readonly connectionTestRequestUrl?: string;
+  readonly modelDiscoveryOptional?: boolean;
+  readonly requestProtocol?: OpenAIRequestProtocol;
+  readonly useConfiguredBaseUrl?: boolean;
+}
+
+const readHttpStatus = (error: unknown): number | null => {
+  if (typeof error !== 'object' || error === null || !('status' in error)) {
+    return null;
+  }
+
+  return typeof error.status === 'number' ? error.status : null;
+};
+
+const isUnsupportedEndpointError = (error: unknown): boolean => {
+  const status = readHttpStatus(error);
+  return status === 404 || status === 405 || status === 501;
+};
 
 const isOpenAITextModel = (modelId: string): boolean => {
   const normalizedId = modelId.toLowerCase();
@@ -54,31 +88,72 @@ const isOpenAITextModel = (modelId: string): boolean => {
 };
 
 export class OpenAICompatibleProvider implements AIProvider {
+  private readonly apiKeyRequired: boolean;
+  private readonly connectionTestRequestUrl: string | undefined;
+  private readonly fixedBaseURL: string | undefined;
+  private readonly modelDiscoveryOptional: boolean;
+  private readonly requestProtocol: OpenAIRequestProtocol;
+  private readonly useConfiguredBaseUrl: boolean;
   private client: OpenAI | null = null;
+  private configurationError: string | null = null;
   private model = '';
+  private resolvedRequestProtocol:
+    | ResolvedOpenAIRequestProtocol
+    | null = null;
 
   public constructor(
     public readonly id: AIProviderId,
     public readonly displayName: string,
-    private readonly baseURL?: string,
-  ) {}
+    options: OpenAICompatibleProviderOptions = {},
+  ) {
+    this.apiKeyRequired = options.apiKeyRequired ?? true;
+    this.connectionTestRequestUrl =
+      options.connectionTestRequestUrl;
+    this.fixedBaseURL = options.baseURL;
+    this.modelDiscoveryOptional =
+      options.modelDiscoveryOptional ?? false;
+    this.requestProtocol = options.requestProtocol ?? 'responses';
+    this.useConfiguredBaseUrl = options.useConfiguredBaseUrl ?? false;
+  }
 
   public initialize(
     configuration: AIProviderConfiguration,
   ): Promise<void> {
     const apiKey = configuration.apiKey.trim();
+    const configuredBaseURL = this.useConfiguredBaseUrl
+      ? normalizeOpenAICompatibleBaseUrl(configuration.baseUrl)
+      : this.fixedBaseURL;
     this.model = configuration.model.trim();
-    this.client =
-      apiKey.length === 0
-        ? null
-        : new OpenAI({
-            apiKey,
-            ...(this.baseURL === undefined
-              ? {}
-              : { baseURL: this.baseURL }),
-            timeout: REQUEST_TIMEOUT_MS,
-            maxRetries: MAXIMUM_RETRIES,
-          });
+    this.resolvedRequestProtocol = null;
+
+    if (this.useConfiguredBaseUrl && configuredBaseURL === null) {
+      this.client = null;
+      this.configurationError =
+        `${this.displayName} requires a valid base URL.`;
+      return Promise.resolve();
+    }
+
+    if (this.apiKeyRequired && apiKey.length === 0) {
+      this.client = null;
+      this.configurationError = `${this.displayName} requires an API key.`;
+      return Promise.resolve();
+    }
+
+    const unauthenticated = apiKey.length === 0;
+    this.client = new OpenAI({
+      apiKey: unauthenticated
+        ? UNAUTHENTICATED_API_KEY_PLACEHOLDER
+        : apiKey,
+      ...(configuredBaseURL === undefined
+        ? {}
+        : { baseURL: configuredBaseURL }),
+      ...(unauthenticated
+        ? { defaultHeaders: { Authorization: null } }
+        : {}),
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRetries: MAXIMUM_RETRIES,
+    });
+    this.configurationError = null;
 
     return Promise.resolve();
   }
@@ -93,44 +168,67 @@ export class OpenAICompatibleProvider implements AIProvider {
   ): Promise<AIResponse> {
     const client = this.requireClient();
     const model = this.requireModel();
-    const requestOptions =
-      options.signal === undefined
-        ? undefined
-        : { signal: options.signal };
 
     try {
-      const response = await client.responses.create(
-        {
+      if (this.requestProtocol === 'responses') {
+        return await this.sendResponsesMessage(
+          client,
           model,
-          input: request.prompt,
-          max_output_tokens: MAXIMUM_AI_OUTPUT_TOKENS,
-        },
-        requestOptions,
-      );
-      const content = response.output_text.trim();
-
-      if (content.length === 0) {
-        throw createEmptyResponseError(this.id, this.displayName);
+          request,
+          options,
+        );
       }
 
-      return {
-        providerId: this.id,
-        content,
-        finishReason:
-          response.status === 'cancelled'
-            ? 'cancelled'
-            : response.status === 'incomplete'
-              ? 'length'
-              : 'stop',
-        ...(response.usage === undefined
-          ? {}
-          : {
-              usage: {
-                inputTokens: response.usage.input_tokens,
-                outputTokens: response.usage.output_tokens,
-              },
-            }),
-      };
+      if (this.requestProtocol === 'chat-completions') {
+        return await this.sendChatCompletionsMessage(
+          client,
+          model,
+          request,
+          options,
+        );
+      }
+
+      if (this.resolvedRequestProtocol === 'responses') {
+        return await this.sendResponsesMessage(
+          client,
+          model,
+          request,
+          options,
+        );
+      }
+
+      if (this.resolvedRequestProtocol === 'chat-completions') {
+        return await this.sendChatCompletionsMessage(
+          client,
+          model,
+          request,
+          options,
+        );
+      }
+
+      try {
+        const response = await this.sendChatCompletionsMessage(
+          client,
+          model,
+          request,
+          options,
+        );
+        this.resolvedRequestProtocol = 'chat-completions';
+        return response;
+      } catch (error) {
+        if (!isUnsupportedEndpointError(error)) {
+          throw error;
+        }
+      }
+
+      const response = await this.sendResponsesMessage(
+        client,
+        model,
+        request,
+        options,
+      );
+      this.resolvedRequestProtocol = 'responses';
+      return response;
     } catch (error) {
       throw toProviderError(this.id, this.displayName, error);
     }
@@ -164,10 +262,16 @@ export class OpenAICompatibleProvider implements AIProvider {
 
       // OpenAI's Models API exposes identifiers and ownership, but not endpoint
       // capability metadata. Filter the account-specific response conservatively
-      // to known text-generation families instead of presenting embeddings,
-      // moderation, image, audio, or realtime models as chat choices.
+      // for OpenAI; compatible providers keep their server-defined catalog.
       return normalizeModels(models);
     } catch (error) {
+      if (
+        this.modelDiscoveryOptional &&
+        isUnsupportedEndpointError(error)
+      ) {
+        return [];
+      }
+
       throw toProviderError(this.id, this.displayName, error);
     }
   }
@@ -185,9 +289,28 @@ export class OpenAICompatibleProvider implements AIProvider {
       );
 
       return {
-        message: `${this.displayName} connected successfully.`,
+        message: 'Connection successful.',
       };
     } catch (error) {
+      if (this.connectionTestRequestUrl !== undefined) {
+        throw toProviderHttpError(
+          this.id,
+          this.displayName,
+          this.connectionTestRequestUrl,
+          error,
+        );
+      }
+
+      if (
+        this.modelDiscoveryOptional &&
+        isUnsupportedEndpointError(error)
+      ) {
+        return {
+          message:
+            'Connection successful. Models endpoint unavailable.',
+        };
+      }
+
       throw toProviderError(this.id, this.displayName, error);
     }
   }
@@ -200,7 +323,9 @@ export class OpenAICompatibleProvider implements AIProvider {
 
   public dispose(): Promise<void> {
     this.client = null;
+    this.configurationError = null;
     this.model = '';
+    this.resolvedRequestProtocol = null;
     return Promise.resolve();
   }
 
@@ -208,11 +333,92 @@ export class OpenAICompatibleProvider implements AIProvider {
     if (this.client === null) {
       throw createConfigurationError(
         this.id,
-        `${this.displayName} requires an API key.`,
+        this.configurationError ??
+          `${this.displayName} is not configured.`,
       );
     }
 
     return this.client;
+  }
+
+  private async sendResponsesMessage(
+    client: OpenAI,
+    model: string,
+    request: AIRequest,
+    options: AIOperationOptions,
+  ): Promise<AIResponse> {
+    const response = await client.responses.create(
+      {
+        model,
+        input: request.prompt,
+        max_output_tokens: MAXIMUM_AI_OUTPUT_TOKENS,
+      },
+      options.signal === undefined
+        ? undefined
+        : { signal: options.signal },
+    );
+    const content = response.output_text.trim();
+
+    if (content.length === 0) {
+      throw createEmptyResponseError(this.id, this.displayName);
+    }
+
+    return {
+      providerId: this.id,
+      content,
+      finishReason:
+        response.status === 'cancelled'
+          ? 'cancelled'
+          : response.status === 'incomplete'
+            ? 'length'
+            : 'stop',
+      ...(response.usage === undefined
+        ? {}
+        : {
+            usage: {
+              inputTokens: response.usage.input_tokens,
+              outputTokens: response.usage.output_tokens,
+            },
+          }),
+    };
+  }
+
+  private async sendChatCompletionsMessage(
+    client: OpenAI,
+    model: string,
+    request: AIRequest,
+    options: AIOperationOptions,
+  ): Promise<AIResponse> {
+    const response = await client.chat.completions.create(
+      {
+        model,
+        messages: [{ role: 'user', content: request.prompt }],
+        max_tokens: MAXIMUM_AI_OUTPUT_TOKENS,
+      },
+      options.signal === undefined
+        ? undefined
+        : { signal: options.signal },
+    );
+    const choice = response.choices[0];
+    const content = choice?.message.content?.trim() ?? '';
+
+    if (content.length === 0) {
+      throw createEmptyResponseError(this.id, this.displayName);
+    }
+
+    return {
+      providerId: this.id,
+      content,
+      finishReason: choice?.finish_reason === 'length' ? 'length' : 'stop',
+      ...(response.usage === undefined
+        ? {}
+        : {
+            usage: {
+              inputTokens: response.usage.prompt_tokens,
+              outputTokens: response.usage.completion_tokens,
+            },
+          }),
+    };
   }
 
   private requireModel(): string {

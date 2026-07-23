@@ -343,6 +343,15 @@ select {
   padding-top: 18px;
 }
 
+.ai-settings-actions--with-diagnostics {
+  align-items: flex-start;
+}
+
+.connection-feedback {
+  min-width: 0;
+  flex: 1;
+}
+
 .connection-status {
   max-width: 38ch;
   margin: 0;
@@ -358,6 +367,66 @@ select {
 
 .connection-status[data-status='error'] {
   color: var(--danger);
+}
+
+.connection-diagnostics {
+  max-width: 54ch;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--danger) 24%, var(--border));
+  border-radius: 8px;
+  background: var(--danger-surface);
+  color: var(--text);
+}
+
+.connection-diagnostics h3 {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+}
+
+.connection-diagnostics dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.connection-diagnostics dl > div {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.connection-diagnostics dt,
+.connection-diagnostics dd {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.connection-diagnostics dt {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.connection-diagnostics dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connection-diagnostics code,
+.connection-diagnostics pre {
+  font: inherit;
+}
+
+.connection-diagnostics pre {
+  max-height: 96px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .ai-settings-actions__buttons {

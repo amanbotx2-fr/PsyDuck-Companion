@@ -150,12 +150,6 @@ export function PomodoroDurationPanel({
       onSubmit={handleSubmit}
     >
       <header className="floating-companion-panel__header">
-        <span
-          className="floating-companion-panel__icon"
-          aria-hidden="true"
-        >
-          🍅
-        </span>
         <h2
           className="floating-companion-panel__title"
           id={titleId}

@@ -43,6 +43,7 @@ export interface AIServiceConfiguration {
   readonly model: string;
   readonly apiKey: string;
   readonly endpoint: string;
+  readonly baseUrl: string;
 }
 
 export interface AIAskOptions extends AIOperationOptions {
@@ -51,6 +52,7 @@ export interface AIAskOptions extends AIOperationOptions {
 
 interface AIProviderConfigurationFingerprint {
   readonly apiKeyDigest: string;
+  readonly baseUrl: string;
   readonly endpoint: string;
   readonly model: string;
 }
@@ -104,6 +106,7 @@ export class AIService {
         model: configuration.model.trim(),
         apiKey: configuration.apiKey.trim(),
         endpoint: configuration.endpoint.trim(),
+        baseUrl: configuration.baseUrl.trim(),
       };
       const nextConfigurationFingerprint =
         this.fingerprintConfiguration(nextConfiguration);
@@ -305,6 +308,7 @@ export class AIService {
       right !== null &&
       left.model === right.model &&
       left.apiKeyDigest === right.apiKeyDigest &&
+      left.baseUrl === right.baseUrl &&
       left.endpoint === right.endpoint
     );
   }
@@ -316,6 +320,7 @@ export class AIService {
       apiKeyDigest: createHash('sha256')
         .update(configuration.apiKey)
         .digest('hex'),
+      baseUrl: configuration.baseUrl,
       endpoint: configuration.endpoint,
       model: configuration.model,
     };

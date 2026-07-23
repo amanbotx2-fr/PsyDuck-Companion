@@ -34,6 +34,18 @@ export interface ApplicationMenuActions {
   readonly requestDailyPlanner: () => void;
 }
 
+export const createApplicationMenu = (): Menu | null => {
+  if (process.platform !== 'darwin') {
+    return null;
+  }
+
+  // macOS dispatches standard text-editing accelerators through menu roles.
+  return Menu.buildFromTemplate([
+    { role: 'appMenu' },
+    { role: 'editMenu' },
+  ]);
+};
+
 const createIntervalMenu = (
   activeInterval: WaterReminderInterval,
   updateSettings: ApplicationMenuActions['updateSettings'],
@@ -144,7 +156,7 @@ export const createCompanionContextMenu = (
     },
     { type: 'separator' },
     {
-      label: '💧 Water Reminders',
+      label: 'Water Reminders',
       submenu: [
         {
           label: 'Enabled',
@@ -167,7 +179,7 @@ export const createCompanionContextMenu = (
     },
     { type: 'separator' },
     {
-      label: '👀 Eye Tracking',
+      label: 'Eye Tracking',
       type: 'checkbox',
       checked: settings.general.eyeTracking,
       click: (menuItem) => {
@@ -177,7 +189,7 @@ export const createCompanionContextMenu = (
       },
     },
     {
-      label: '📌 Always On Top',
+      label: 'Always On Top',
       type: 'checkbox',
       checked: settings.general.alwaysOnTop,
       click: (menuItem) => {
@@ -188,7 +200,7 @@ export const createCompanionContextMenu = (
     },
     { type: 'separator' },
     {
-      label: '⚙ Preferences…',
+      label: 'Preferences…',
       click: actions.openPreferences,
     },
     { type: 'separator' },

@@ -6,11 +6,13 @@ import {
   type ReactNode,
 } from 'react';
 
+import type { AIProviderHttpDiagnostics } from '../ai/AIProvider';
 import {
   AI_PROVIDER_OPTIONS,
   isAiProvider,
   isValidAiEndpoint,
   isWaterReminderInterval,
+  normalizeOpenAICompatibleBaseUrl,
   WATER_REMINDER_INTERVAL_OPTIONS,
   type AiConfigurationUpdate,
   type PreferencesAiSettings,
@@ -79,7 +81,11 @@ type ConnectionStatus =
   | { readonly phase: 'idle' }
   | { readonly phase: 'testing'; readonly message: string }
   | { readonly phase: 'connected'; readonly message: string }
-  | { readonly phase: 'error'; readonly message: string };
+  | {
+      readonly phase: 'error';
+      readonly message: string;
+      readonly diagnostics?: AIProviderHttpDiagnostics;
+    };
 
 type ModelLoadingStatus =
   | { readonly phase: 'idle' }
@@ -147,7 +153,8 @@ export function PreferencesApp() {
       settings.ai.provider === aiDraft.provider &&
       settings.ai.model === aiDraft.model &&
       settings.ai.apiKeyConfigured === aiDraft.apiKeyConfigured &&
-      settings.ai.endpoint === aiDraft.endpoint
+      settings.ai.endpoint === aiDraft.endpoint &&
+      settings.ai.baseUrl === aiDraft.baseUrl
     ) {
       return;
     }
@@ -166,11 +173,13 @@ export function PreferencesApp() {
   }, [
     aiDirty,
     settings.ai.apiKeyConfigured,
+    settings.ai.baseUrl,
     settings.ai.enabled,
     settings.ai.endpoint,
     settings.ai.model,
     settings.ai.provider,
     aiDraft.apiKeyConfigured,
+    aiDraft.baseUrl,
     aiDraft.enabled,
     aiDraft.endpoint,
     aiDraft.model,
@@ -218,10 +227,15 @@ export function PreferencesApp() {
   };
 
   const saveAiSettings = async (): Promise<boolean> => {
+    const customBaseUrl =
+      aiDraft.provider === 'custom'
+        ? normalizeOpenAICompatibleBaseUrl(aiDraft.baseUrl)
+        : aiDraft.baseUrl.trim();
     const normalizedDraft: PreferencesAiSettings = {
       ...aiDraft,
       model: aiDraft.model.trim(),
       endpoint: aiDraft.endpoint.trim(),
+      baseUrl: customBaseUrl ?? '',
     };
 
     if (
@@ -231,6 +245,15 @@ export function PreferencesApp() {
       setConnectionStatus({
         phase: 'error',
         message: 'Enter a valid HTTP or HTTPS Ollama endpoint.',
+      });
+      return false;
+    }
+
+    if (normalizedDraft.provider === 'custom' && customBaseUrl === null) {
+      setConnectionStatus({
+        phase: 'error',
+        message:
+          'Enter a valid HTTPS URL or a local/private-network HTTP URL.',
       });
       return false;
     }
@@ -245,6 +268,7 @@ export function PreferencesApp() {
       provider: normalizedDraft.provider,
       model: normalizedDraft.model,
       endpoint: normalizedDraft.endpoint,
+      baseUrl: normalizedDraft.baseUrl,
       ...(apiKey === undefined ? {} : { apiKey }),
     };
     const didSave = await updateAiConfiguration(configuration);
@@ -303,6 +327,9 @@ export function PreferencesApp() {
         setConnectionStatus({
           phase: 'error',
           message: result.message,
+          ...(result.diagnostics === undefined
+            ? {}
+            : { diagnostics: result.diagnostics }),
         });
         return;
       }
@@ -311,7 +338,10 @@ export function PreferencesApp() {
       setModelLoadingStatus(INITIAL_MODEL_LOADING_STATUS);
       setConnectionStatus({
         phase: 'connected',
-        message: personalityService.getProviderConnectedMessage(),
+        message:
+          aiDraft.provider === 'custom'
+            ? result.message
+            : personalityService.getProviderConnectedMessage(),
       });
     } catch {
       setConnectionStatus({
@@ -353,7 +383,11 @@ export function PreferencesApp() {
       if (result.models.length === 0) {
         setAvailableModels([]);
         setModelLoadingStatus({ phase: 'empty' });
-        updateAiDraft({ model: '' }, false);
+
+        if (aiDraft.provider !== 'custom') {
+          updateAiDraft({ model: '' }, false);
+        }
+
         return;
       }
 
@@ -361,7 +395,9 @@ export function PreferencesApp() {
       setModelLoadingStatus({ phase: 'loaded' });
 
       if (
-        !result.models.some((model) => model.id === aiDraft.model)
+        aiDraft.provider === 'custom'
+          ? aiDraft.model.trim().length === 0
+          : !result.models.some((model) => model.id === aiDraft.model)
       ) {
         updateAiDraft({ model: result.models[0]?.id ?? '' }, false);
       }
@@ -378,7 +414,9 @@ export function PreferencesApp() {
     modelLoadingStatus.phase === 'loading'
       ? 'Loading models...'
       : modelLoadingStatus.phase === 'empty'
-        ? 'No models available'
+        ? aiDraft.provider === 'custom'
+          ? 'Models endpoint unavailable. Enter a model manually.'
+          : 'No models available'
         : modelLoadingStatus.phase === 'error'
           ? modelLoadingStatus.message
           : connectionStatus.phase === 'idle'
@@ -391,6 +429,10 @@ export function PreferencesApp() {
       : connectionStatus.phase === 'connected'
         ? 'success'
         : connectionStatus.phase;
+  const connectionDiagnostics =
+    connectionStatus.phase === 'error'
+      ? connectionStatus.diagnostics
+      : undefined;
 
   const handleWaterIntervalChange = (
     event: ChangeEvent<HTMLSelectElement>,
@@ -602,6 +644,29 @@ export function PreferencesApp() {
           }
         />
 
+        {aiDraft.provider === 'custom' ? (
+          <PreferenceRow
+            htmlFor="ai-base-url"
+            label="Base URL *"
+            description="The API root, including its compatibility path when required."
+            control={
+              <input
+                className="settings-input"
+                id="ai-base-url"
+                type="url"
+                value={aiDraft.baseUrl}
+                placeholder="https://example.com/v1"
+                disabled={settingsAreLoading || aiActionInProgress}
+                spellCheck={false}
+                required
+                onChange={(event) => {
+                  updateAiDraft({ baseUrl: event.currentTarget.value });
+                }}
+              />
+            }
+          />
+        ) : null}
+
         {aiDraft.provider === 'ollama' ? (
           <PreferenceRow
             htmlFor="ai-endpoint"
@@ -629,7 +694,9 @@ export function PreferencesApp() {
             description={
               aiDraft.apiKeyConfigured
                 ? 'A key is configured. Enter a new key to replace it.'
-                : 'Enter a key to configure this provider.'
+                : aiDraft.provider === 'custom'
+                  ? 'Optional. Leave this empty for servers without authentication.'
+                  : 'Enter a key to configure this provider.'
             }
             control={
               <div className="credential-control">
@@ -664,15 +731,71 @@ export function PreferencesApp() {
           />
         )}
 
-        <div className="ai-settings-actions">
-          <p
-            className="connection-status"
-            data-status={providerStatusTone}
-            aria-live="polite"
-            role={providerStatusTone === 'error' ? 'alert' : 'status'}
-          >
-            {providerStatusMessage}
-          </p>
+        <div
+          className={`ai-settings-actions${
+            connectionDiagnostics === undefined
+              ? ''
+              : ' ai-settings-actions--with-diagnostics'
+          }`}
+        >
+          <div className="connection-feedback">
+            <p
+              className="connection-status"
+              data-status={providerStatusTone}
+              aria-live="polite"
+              role={providerStatusTone === 'error' ? 'alert' : 'status'}
+            >
+              {providerStatusMessage}
+            </p>
+            {connectionDiagnostics === undefined ? null : (
+              <section
+                className="connection-diagnostics"
+                aria-labelledby="connection-diagnostics-title"
+              >
+                <h3 id="connection-diagnostics-title">
+                  Developer diagnostics
+                </h3>
+                <dl>
+                  <div>
+                    <dt>Request URL</dt>
+                    <dd>
+                      <code>{connectionDiagnostics.requestUrl}</code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>HTTP status</dt>
+                    <dd>
+                      {connectionDiagnostics.httpStatusCode === null
+                        ? 'Not available'
+                        : `${connectionDiagnostics.httpStatusCode}${
+                            connectionDiagnostics.httpStatusText === null
+                              ? ''
+                              : ` ${connectionDiagnostics.httpStatusText}`
+                          }`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Response body</dt>
+                    <dd>
+                      <pre>{connectionDiagnostics.responseBody}</pre>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Error code</dt>
+                    <dd>
+                      <code>
+                        {connectionDiagnostics.errorCode ?? 'Not provided'}
+                      </code>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Error message</dt>
+                    <dd>{connectionDiagnostics.errorMessage}</dd>
+                  </div>
+                </dl>
+              </section>
+            )}
+          </div>
           <div className="ai-settings-actions__buttons">
             <button
               className="settings-button settings-button--secondary"
@@ -712,35 +835,71 @@ export function PreferencesApp() {
         <PreferenceRow
           htmlFor="ai-model"
           label="Model"
-          description="Models are loaded from the selected provider after a successful connection test."
+          description={
+            aiDraft.provider === 'custom'
+              ? 'Enter a model ID or choose one after loading models.'
+              : 'Models are loaded from the selected provider after a successful connection test.'
+          }
           control={
-            <select
-              className="settings-select settings-select--model"
-              id="ai-model"
-              value={aiDraft.model}
-              disabled={
-                settingsAreLoading ||
-                aiActionInProgress ||
-                modelLoadingStatus.phase !== 'loaded' ||
-                availableModels.length === 0
-              }
-              onChange={(event) => {
-                updateAiDraft({ model: event.currentTarget.value }, false);
-              }}
-            >
-              {modelLoadingStatus.phase === 'loading' ? (
-                <option value="">Loading models...</option>
-              ) : modelLoadingStatus.phase === 'empty' ? (
-                <option value="">No models available</option>
-              ) : modelLoadingStatus.phase === 'loaded' ? null : (
-                <option value="">Load models first</option>
-              )}
-              {availableModels.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.displayName ?? model.id}
-                </option>
-              ))}
-            </select>
+            aiDraft.provider === 'custom' ? (
+              <>
+                <input
+                  className="settings-input settings-select--model"
+                  id="ai-model"
+                  type="text"
+                  list="ai-model-options"
+                  value={aiDraft.model}
+                  placeholder="Enter model ID"
+                  disabled={settingsAreLoading || aiActionInProgress}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => {
+                    updateAiDraft(
+                      { model: event.currentTarget.value },
+                      false,
+                    );
+                  }}
+                />
+                <datalist id="ai-model-options">
+                  {availableModels.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.displayName ?? model.id}
+                    </option>
+                  ))}
+                </datalist>
+              </>
+            ) : (
+              <select
+                className="settings-select settings-select--model"
+                id="ai-model"
+                value={aiDraft.model}
+                disabled={
+                  settingsAreLoading ||
+                  aiActionInProgress ||
+                  modelLoadingStatus.phase !== 'loaded' ||
+                  availableModels.length === 0
+                }
+                onChange={(event) => {
+                  updateAiDraft(
+                    { model: event.currentTarget.value },
+                    false,
+                  );
+                }}
+              >
+                {modelLoadingStatus.phase === 'loading' ? (
+                  <option value="">Loading models...</option>
+                ) : modelLoadingStatus.phase === 'empty' ? (
+                  <option value="">No models available</option>
+                ) : modelLoadingStatus.phase === 'loaded' ? null : (
+                  <option value="">Load models first</option>
+                )}
+                {availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.displayName ?? model.id}
+                  </option>
+                ))}
+              </select>
+            )
           }
         />
 
