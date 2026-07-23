@@ -29,6 +29,7 @@ export type RuntimeSettingsChangeListener = (
 ) => void;
 export type UserNamePanelRequestListener = () => void;
 export type ReminderCreationPanelRequestListener = () => void;
+export type ReminderManagerPanelRequestListener = () => void;
 export type ReminderFiredListener = (
   notification: ReminderFiredNotification,
 ) => void;
@@ -77,6 +78,9 @@ export interface CompanionBridge {
   ) => () => void;
   readonly onReminderCreationPanelRequested: (
     listener: ReminderCreationPanelRequestListener,
+  ) => () => void;
+  readonly onReminderManagerPanelRequested: (
+    listener: ReminderManagerPanelRequestListener,
   ) => () => void;
   readonly onReminderFired: (
     listener: ReminderFiredListener,

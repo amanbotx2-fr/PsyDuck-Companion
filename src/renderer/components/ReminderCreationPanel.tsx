@@ -10,11 +10,14 @@ import {
   MAXIMUM_REMINDER_MESSAGE_LENGTH,
   MAXIMUM_REMINDER_TITLE_LENGTH,
   type CreateReminderInput,
+  type Reminder,
 } from '../../shared/reminders';
 import {
   createDefaultReminderLocalSchedule,
+  formatReminderLocalSchedule,
   parseReminderLocalSchedule,
   REMINDER_TIME_STEP_MINUTES,
+  type ReminderLocalSchedule,
 } from '../../shared/reminderDraft';
 import {
   FloatingCompanionPanel,
@@ -25,6 +28,7 @@ export type ReminderCreationPanelDismissReason =
   FloatingCompanionPanelDismissReason;
 
 export interface ReminderCreationPanelProps {
+  readonly initialReminder?: Reminder;
   readonly open: boolean;
   readonly onDismiss: (
     reason: ReminderCreationPanelDismissReason,
@@ -48,12 +52,18 @@ interface ReminderDraftErrors {
   readonly form?: string;
 }
 
-const createInitialDraft = (): ReminderDraft => {
-  const schedule = createDefaultReminderLocalSchedule();
+const createInitialDraft = (
+  initialReminder?: Reminder,
+): ReminderDraft => {
+  const schedule =
+    (initialReminder === undefined
+      ? null
+      : formatReminderLocalSchedule(initialReminder.scheduledAt)) ??
+    createDefaultReminderLocalSchedule();
 
   return {
-    title: '',
-    message: '',
+    title: initialReminder?.title ?? '',
+    message: initialReminder?.message ?? '',
     date: schedule.date,
     time: schedule.time,
   };
@@ -69,6 +79,7 @@ const getFirstError = (errors: ReminderDraftErrors): string | null =>
 
 const validateDraft = (
   draft: ReminderDraft,
+  allowedPastSchedule: ReminderLocalSchedule | null = null,
   nowTimestamp = Date.now(),
 ): ReminderDraftErrors => {
   const errors: {
@@ -107,7 +118,14 @@ const validateDraft = (
     if (scheduledAt === null) {
       errors.date = 'Choose a valid date and time.';
       errors.time = errors.date;
-    } else if (Date.parse(scheduledAt) <= nowTimestamp) {
+    } else if (
+      Date.parse(scheduledAt) <= nowTimestamp &&
+      !(
+        allowedPastSchedule !== null &&
+        draft.date === allowedPastSchedule.date &&
+        draft.time === allowedPastSchedule.time
+      )
+    ) {
       errors.date = 'Choose a future date and time.';
       errors.time = errors.date;
     }
@@ -146,6 +164,7 @@ const getServiceErrors = (error: unknown): ReminderDraftErrors => {
 };
 
 export function ReminderCreationPanel({
+  initialReminder,
   open,
   onDismiss,
   onSave,
@@ -163,9 +182,20 @@ export function ReminderCreationPanel({
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
   const submissionInProgressRef = useRef(false);
-  const [draft, setDraft] = useState<ReminderDraft>(createInitialDraft);
+  const [draft, setDraft] = useState<ReminderDraft>(() =>
+    createInitialDraft(initialReminder),
+  );
   const [errors, setErrors] = useState<ReminderDraftErrors>({});
   const [submitting, setSubmitting] = useState(false);
+  const isEditing = initialReminder !== undefined;
+  const initialSchedule =
+    initialReminder === undefined
+      ? null
+      : formatReminderLocalSchedule(initialReminder.scheduledAt);
+  const validateCurrentDraft = (
+    nextDraft: ReminderDraft,
+  ): ReminderDraftErrors =>
+    validateDraft(nextDraft, initialSchedule);
 
   useEffect(() => {
     if (!open) {
@@ -174,7 +204,7 @@ export function ReminderCreationPanel({
       return;
     }
 
-    setDraft(createInitialDraft());
+    setDraft(createInitialDraft(initialReminder));
     setErrors({});
     submissionInProgressRef.current = false;
     setSubmitting(false);
@@ -186,7 +216,7 @@ export function ReminderCreationPanel({
     return () => {
       cancelAnimationFrame(focusFrameId);
     };
-  }, [open]);
+  }, [initialReminder, open]);
 
   const focusFirstInvalidField = (
     validationErrors: ReminderDraftErrors,
@@ -206,7 +236,7 @@ export function ReminderCreationPanel({
     setDraft(nextDraft);
 
     if (getFirstError(errors) !== null) {
-      setErrors(validateDraft(nextDraft));
+      setErrors(validateCurrentDraft(nextDraft));
     }
   };
 
@@ -215,7 +245,7 @@ export function ReminderCreationPanel({
       return;
     }
 
-    const validationErrors = validateDraft(draft);
+    const validationErrors = validateCurrentDraft(draft);
     setErrors(validationErrors);
 
     if (getFirstError(validationErrors) !== null) {
@@ -292,12 +322,14 @@ export function ReminderCreationPanel({
           className="floating-companion-panel__title"
           id={titleId}
         >
-          New Reminder
+          {isEditing ? 'Edit Reminder' : 'New Reminder'}
         </h2>
       </header>
 
       <p className="visually-hidden" id={descriptionId}>
-        Create a reminder with a title, message, date, and time.
+        {isEditing
+          ? 'Update this reminder’s title, message, date, or time.'
+          : 'Create a reminder with a title, message, date, and time.'}
       </p>
 
       <div className="reminder-creation-panel__field">
@@ -320,7 +352,7 @@ export function ReminderCreationPanel({
           aria-invalid={errors.title !== undefined}
           aria-describedby={feedbackId}
           onBlur={() => {
-            setErrors(validateDraft(draft));
+            setErrors(validateCurrentDraft(draft));
           }}
           onChange={(event) => {
             updateDraft({
@@ -351,7 +383,7 @@ export function ReminderCreationPanel({
           aria-invalid={errors.message !== undefined}
           aria-describedby={feedbackId}
           onBlur={() => {
-            setErrors(validateDraft(draft));
+            setErrors(validateCurrentDraft(draft));
           }}
           onChange={(event) => {
             updateDraft({
@@ -380,7 +412,7 @@ export function ReminderCreationPanel({
           aria-invalid={errors.date !== undefined}
           aria-describedby={feedbackId}
           onBlur={() => {
-            setErrors(validateDraft(draft));
+            setErrors(validateCurrentDraft(draft));
           }}
           onChange={(event) => {
             updateDraft({
@@ -410,7 +442,7 @@ export function ReminderCreationPanel({
           aria-invalid={errors.time !== undefined}
           aria-describedby={feedbackId}
           onBlur={() => {
-            setErrors(validateDraft(draft));
+            setErrors(validateCurrentDraft(draft));
           }}
           onChange={(event) => {
             updateDraft({
@@ -448,7 +480,11 @@ export function ReminderCreationPanel({
           disabled={!open || submitting}
           tabIndex={open ? 0 : -1}
         >
-          {submitting ? 'Saving…' : 'Save'}
+          {submitting
+            ? 'Saving…'
+            : isEditing
+              ? 'Save Changes'
+              : 'Save'}
         </button>
       </footer>
     </FloatingCompanionPanel>

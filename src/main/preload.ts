@@ -19,6 +19,7 @@ import type {
   CursorPositionListener,
   ReminderCreationPanelRequestListener,
   ReminderFiredListener,
+  ReminderManagerPanelRequestListener,
   RuntimeSettingsChangeListener,
   ScreenPoint,
   UserNamePanelRequestListener,
@@ -38,6 +39,8 @@ const IPC_CHANNELS = {
   userNamePanelRequested: 'personal-assistant:user-name-requested',
   reminderCreationPanelRequested:
     'reminders:creation-panel-requested',
+  reminderManagerPanelRequested:
+    'reminders:manager-panel-requested',
   reminderFired: 'reminders:fired',
   askAI: 'ai:ask',
   startPomodoro: 'pomodoro:start',
@@ -63,6 +66,8 @@ const userNamePanelRequestListeners =
   new Set<UserNamePanelRequestListener>();
 const reminderCreationPanelRequestListeners =
   new Set<ReminderCreationPanelRequestListener>();
+const reminderManagerPanelRequestListeners =
+  new Set<ReminderManagerPanelRequestListener>();
 const reminderFiredListeners = new Set<ReminderFiredListener>();
 const pendingReminderNotifications: ReminderFiredNotification[] = [];
 let latestPomodoroState: PomodoroState | null = null;
@@ -70,6 +75,7 @@ let pendingPomodoroCompletion = false;
 let pendingCustomPomodoroDurationRequest = false;
 let pendingUserNamePanelRequest = false;
 let pendingReminderCreationPanelRequest = false;
+let pendingReminderManagerPanelRequest = false;
 
 ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
   if (userNamePanelRequestListeners.size === 0) {
@@ -89,6 +95,17 @@ ipcRenderer.on(IPC_CHANNELS.reminderCreationPanelRequested, () => {
   }
 
   for (const listener of reminderCreationPanelRequestListeners) {
+    listener();
+  }
+});
+
+ipcRenderer.on(IPC_CHANNELS.reminderManagerPanelRequested, () => {
+  if (reminderManagerPanelRequestListeners.size === 0) {
+    pendingReminderManagerPanelRequest = true;
+    return;
+  }
+
+  for (const listener of reminderManagerPanelRequestListeners) {
     listener();
   }
 });
@@ -218,6 +235,24 @@ const companionBridge: CompanionBridge = Object.freeze({
 
     return () => {
       reminderCreationPanelRequestListeners.delete(listener);
+    };
+  },
+  onReminderManagerPanelRequested: (
+    listener: ReminderManagerPanelRequestListener,
+  ) => {
+    reminderManagerPanelRequestListeners.add(listener);
+
+    if (pendingReminderManagerPanelRequest) {
+      queueMicrotask(() => {
+        if (reminderManagerPanelRequestListeners.has(listener)) {
+          pendingReminderManagerPanelRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      reminderManagerPanelRequestListeners.delete(listener);
     };
   },
   onReminderFired: (listener: ReminderFiredListener) => {

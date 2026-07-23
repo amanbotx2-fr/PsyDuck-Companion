@@ -8,7 +8,14 @@ import {
 import { WaterReminder } from '../engine/WaterReminder';
 import { personalityService } from '../personality';
 import { POMODORO_COMPLETION_MESSAGE } from '../shared/pomodoro';
-import type { CreateReminderInput } from '../shared/reminders';
+import {
+  createReminderUpdateInput,
+  type ReminderManagerView,
+} from '../shared/reminderManager';
+import type {
+  CreateReminderInput,
+  Reminder,
+} from '../shared/reminders';
 import { DEFAULT_USER_NAME } from '../shared/settings';
 import {
   PsyDuck,
@@ -32,6 +39,10 @@ import {
   ReminderCreationPanel,
   type ReminderCreationPanelDismissReason,
 } from './components/ReminderCreationPanel';
+import {
+  ReminderManagerPanel,
+  type ReminderManagerPanelDismissReason,
+} from './components/ReminderManagerPanel';
 import { ReminderWidget } from './components/ReminderWidget';
 import { SpeechBubble } from './components/SpeechBubble';
 import {
@@ -97,6 +108,7 @@ export function App() {
     typeof globalThis.setTimeout
   > | null>(null);
   const pendingPomodoroCompletionRef = useRef(false);
+  const returnToReminderManagerRef = useRef(false);
   const mountedRef = useRef(true);
   const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
     INITIAL_AI_INTERACTION_STATE,
@@ -120,6 +132,18 @@ export function App() {
     useState(false);
   const [reminderPanelRequestSequence, setReminderPanelRequestSequence] =
     useState(0);
+  const [editingReminder, setEditingReminder] =
+    useState<Reminder | null>(null);
+  const [reminderManagerOpen, setReminderManagerOpen] =
+    useState(false);
+  const [reminderManagerPresent, setReminderManagerPresent] =
+    useState(false);
+  const [
+    reminderManagerRequestSequence,
+    setReminderManagerRequestSequence,
+  ] = useState(0);
+  const [reminderManagerView, setReminderManagerView] =
+    useState<ReminderManagerView>('upcoming');
   const pomodoroState = usePomodoroState();
   const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
@@ -350,6 +374,12 @@ export function App() {
     setUserNamePanelPresent(false);
   }, []);
 
+  const openReminderManager = useCallback((): void => {
+    setReminderManagerRequestSequence((sequence) => sequence + 1);
+    setReminderManagerPresent(true);
+    setReminderManagerOpen(true);
+  }, []);
+
   const handleReminderPanelDismiss = useCallback(
     (_reason: ReminderCreationPanelDismissReason): void => {
       setReminderPanelOpen(false);
@@ -365,17 +395,86 @@ export function App() {
         throw new Error('The desktop bridge is unavailable.');
       }
 
+      if (editingReminder !== null) {
+        const update = createReminderUpdateInput(
+          editingReminder,
+          input,
+        );
+
+        if (update !== null) {
+          await bridge.updateReminder(editingReminder.id, update);
+        }
+
+        setReminderPanelOpen(false);
+        return;
+      }
+
       await bridge.createReminder(input);
       setReminderPanelOpen(false);
       const userName = settings.userName.trim() || DEFAULT_USER_NAME;
       speechBubble.show(`Got it, ${userName}! I'll remind you.`);
     },
-    [settings.userName, speechBubble.show],
+    [editingReminder, settings.userName, speechBubble.show],
   );
 
   const handleReminderPanelAfterClose = useCallback((): void => {
     setReminderPanelPresent(false);
+    setEditingReminder(null);
+
+    if (returnToReminderManagerRef.current) {
+      returnToReminderManagerRef.current = false;
+      openReminderManager();
+    }
+  }, [openReminderManager]);
+
+  const handleReminderManagerDismiss = useCallback(
+    (_reason: ReminderManagerPanelDismissReason): void => {
+      setReminderManagerOpen(false);
+    },
+    [],
+  );
+
+  const handleReminderManagerAfterClose = useCallback((): void => {
+    setReminderManagerPresent(false);
   }, []);
+
+  const handleReminderManagerLoad = useCallback(
+    async (): Promise<readonly Reminder[]> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      return bridge.listReminders();
+    },
+    [],
+  );
+
+  const handleReminderManagerDelete = useCallback(
+    async (id: string): Promise<boolean> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      return bridge.deleteReminder(id);
+    },
+    [],
+  );
+
+  const handleReminderManagerEdit = useCallback(
+    (reminder: Reminder): void => {
+      returnToReminderManagerRef.current = true;
+      setReminderManagerOpen(false);
+      setEditingReminder(reminder);
+      setReminderPanelRequestSequence((sequence) => sequence + 1);
+      setReminderPanelPresent(true);
+      setReminderPanelOpen(true);
+    },
+    [],
+  );
 
   const handleContentHeightChange = useCallback((height: number): void => {
     window.psyduck?.setCompanionContentHeight(height);
@@ -449,11 +548,28 @@ export function App() {
     }
 
     return bridge.onReminderCreationPanelRequested(() => {
+      returnToReminderManagerRef.current = false;
+      setEditingReminder(null);
+      setReminderManagerOpen(false);
       setReminderPanelRequestSequence((sequence) => sequence + 1);
       setReminderPanelPresent(true);
       setReminderPanelOpen(true);
     });
   }, []);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onReminderManagerPanelRequested(() => {
+      returnToReminderManagerRef.current = false;
+      setReminderPanelOpen(false);
+      openReminderManager();
+    });
+  }, [openReminderManager]);
 
   useEffect(() => {
     const bridge = window.psyduck;
@@ -676,6 +792,7 @@ export function App() {
       data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
       data-user-name-panel-open={userNamePanelOpen}
       data-reminder-panel-open={reminderPanelOpen}
+      data-reminder-manager-open={reminderManagerOpen}
       data-reminder-widget-visible={
         reminderNotifications.current !== null
       }
@@ -685,10 +802,30 @@ export function App() {
         anchor={psyDuckAnchor}
         onContentHeightChange={handleContentHeightChange}
       >
+        {reminderManagerPresent ? (
+          <CompanionWidget
+            id={COMPANION_WIDGET_IDS.reminderManagerPanel}
+          >
+            <ReminderManagerPanel
+              key={reminderManagerRequestSequence}
+              open={reminderManagerOpen}
+              activeView={reminderManagerView}
+              onViewChange={setReminderManagerView}
+              onDismiss={handleReminderManagerDismiss}
+              onAfterClose={handleReminderManagerAfterClose}
+              onLoad={handleReminderManagerLoad}
+              onEdit={handleReminderManagerEdit}
+              onDelete={handleReminderManagerDelete}
+            />
+          </CompanionWidget>
+        ) : null}
         {reminderPanelPresent ? (
           <CompanionWidget id={COMPANION_WIDGET_IDS.reminderPanel}>
             <ReminderCreationPanel
               key={reminderPanelRequestSequence}
+              {...(editingReminder === null
+                ? {}
+                : { initialReminder: editingReminder })}
               open={reminderPanelOpen}
               onDismiss={handleReminderPanelDismiss}
               onSave={handleReminderSave}

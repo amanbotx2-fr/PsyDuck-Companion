@@ -10,6 +10,7 @@ import {
 } from 'react';
 
 export const COMPANION_WIDGET_IDS = {
+  reminderManagerPanel: 'reminder-manager-panel',
   reminderPanel: 'reminder-panel',
   userNamePanel: 'user-name-panel',
   pomodoroPanel: 'pomodoro-panel',
@@ -23,6 +24,7 @@ export type CompanionWidgetId =
   (typeof COMPANION_WIDGET_IDS)[keyof typeof COMPANION_WIDGET_IDS];
 
 const WIDGET_ORDER: Readonly<Record<CompanionWidgetId, number>> = {
+  [COMPANION_WIDGET_IDS.reminderManagerPanel]: 80,
   [COMPANION_WIDGET_IDS.reminderPanel]: 90,
   [COMPANION_WIDGET_IDS.userNamePanel]: 100,
   [COMPANION_WIDGET_IDS.pomodoroPanel]: 110,

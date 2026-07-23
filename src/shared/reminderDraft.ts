@@ -22,6 +22,36 @@ const formatLocalDate = (date: Date): string =>
 const formatLocalTime = (date: Date): string =>
   `${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}`;
 
+export const formatReminderLocalSchedule = (
+  scheduledAt: string,
+): ReminderLocalSchedule | null => {
+  const scheduledDate = new Date(scheduledAt);
+
+  if (!Number.isFinite(scheduledDate.getTime())) {
+    return null;
+  }
+
+  return {
+    date: formatLocalDate(scheduledDate),
+    time: formatLocalTime(scheduledDate),
+  };
+};
+
+export const areReminderLocalSchedulesEqual = (
+  leftScheduledAt: string,
+  rightScheduledAt: string,
+): boolean => {
+  const left = formatReminderLocalSchedule(leftScheduledAt);
+  const right = formatReminderLocalSchedule(rightScheduledAt);
+
+  return (
+    left !== null &&
+    right !== null &&
+    left.date === right.date &&
+    left.time === right.time
+  );
+};
+
 export const createDefaultReminderLocalSchedule = (
   nowTimestamp = Date.now(),
 ): ReminderLocalSchedule => {

@@ -29,6 +29,7 @@ export interface ApplicationMenuActions {
   readonly requestCustomPomodoroDuration: () => void;
   readonly requestUserName: () => void;
   readonly requestReminderCreation: () => void;
+  readonly requestReminderManagement: () => void;
 }
 
 const createIntervalMenu = (
@@ -109,6 +110,10 @@ export const createCompanionContextMenu = (
             {
               label: 'New Reminder…',
               click: actions.requestReminderCreation,
+            },
+            {
+              label: 'Manage Reminders…',
+              click: actions.requestReminderManagement,
             },
           ],
         },

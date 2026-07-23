@@ -4,7 +4,9 @@ const { describe, test } = require('node:test');
 const {
   DEFAULT_REMINDER_LEAD_TIME_MS,
   REMINDER_TIME_STEP_MINUTES,
+  areReminderLocalSchedulesEqual,
   createDefaultReminderLocalSchedule,
+  formatReminderLocalSchedule,
   parseReminderLocalSchedule,
 } = require('../dist/shared/reminderDraft.js');
 
@@ -49,6 +51,25 @@ describe('reminder creation draft', () => {
     assert.equal(scheduledDate.getDate(), 15);
     assert.equal(scheduledDate.getHours(), 14);
     assert.equal(scheduledDate.getMinutes(), 35);
+  });
+
+  test('formats stored datetimes for edit fields at local minute precision', () => {
+    const storedDate = new Date(2030, 5, 15, 14, 35, 42, 500);
+    const schedule = formatReminderLocalSchedule(
+      storedDate.toISOString(),
+    );
+
+    assert.deepEqual(schedule, {
+      date: '2030-06-15',
+      time: '14:35',
+    });
+    assert.equal(
+      areReminderLocalSchedulesEqual(
+        storedDate.toISOString(),
+        new Date(2030, 5, 15, 14, 35).toISOString(),
+      ),
+      true,
+    );
   });
 
   test('rejects empty, malformed, and impossible local schedules', () => {

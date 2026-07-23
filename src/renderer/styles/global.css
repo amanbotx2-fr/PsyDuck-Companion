@@ -525,6 +525,279 @@ body {
   margin-top: -3px;
 }
 
+.reminder-manager-panel {
+  padding: 12px 12px 10px;
+}
+
+.reminder-manager-panel
+  .floating-companion-panel__header {
+  margin-bottom: 9px;
+}
+
+.reminder-manager-panel__tabs {
+  display: grid;
+  padding: 2px;
+  border: 1px solid rgb(42 39 34 / 14%);
+  border-radius: 9px;
+  background: rgb(242 239 232);
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.reminder-manager-panel__tab {
+  min-width: 0;
+  min-height: 27px;
+  padding: 4px 3px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgb(93 86 77);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 17px;
+}
+
+.reminder-manager-panel__tab:hover {
+  color: rgb(52 48 42);
+}
+
+.reminder-manager-panel__tab[aria-selected='true'] {
+  background: rgb(255 254 251);
+  box-shadow:
+    0 1px 2px rgb(23 20 16 / 11%),
+    0 0 0 1px rgb(42 39 34 / 8%);
+  color: rgb(36 33 29);
+}
+
+.reminder-manager-panel__tab:focus-visible {
+  outline: 2px solid rgb(122 82 25 / 52%);
+  outline-offset: 1px;
+}
+
+.reminder-manager-panel__list {
+  max-height: 292px;
+  margin-top: 8px;
+  padding: 0 2px;
+  overflow-y: auto;
+  outline: 0;
+  overscroll-behavior: contain;
+}
+
+.reminder-manager-panel__list:focus-visible {
+  border-radius: 7px;
+  box-shadow: 0 0 0 2px rgb(122 82 25 / 38%);
+}
+
+.reminder-manager-panel__state {
+  display: grid;
+  min-height: 92px;
+  margin: 0;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: rgb(101 93 82);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 16px;
+  text-align: center;
+}
+
+.reminder-manager-panel__state p {
+  margin: 0;
+}
+
+.reminder-manager-panel__group + .reminder-manager-panel__group {
+  margin-top: 11px;
+}
+
+.reminder-manager-panel__group-title {
+  margin: 0;
+  padding: 2px 2px 4px;
+  color: rgb(101 93 82);
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: 0.06em;
+  line-height: 13px;
+  text-transform: uppercase;
+}
+
+.reminder-manager-panel__cards {
+  display: grid;
+}
+
+.reminder-manager-card {
+  display: grid;
+  padding: 9px 2px 10px;
+  border-bottom: 1px solid rgb(42 39 34 / 12%);
+}
+
+.reminder-manager-card:first-child {
+  border-top: 1px solid rgb(42 39 34 / 12%);
+}
+
+.reminder-manager-card__heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 7px;
+}
+
+.reminder-manager-card__title {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  line-height: 16px;
+}
+
+.reminder-manager-card__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  color: rgb(93 86 77);
+  font-size: 9px;
+  font-weight: 680;
+  line-height: 14px;
+}
+
+.reminder-manager-card__status::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgb(126 91 37);
+  content: '';
+}
+
+.reminder-manager-card[data-status='completed']
+  .reminder-manager-card__status::before {
+  background: rgb(76 117 76);
+}
+
+.reminder-manager-card[data-status='overdue']
+  .reminder-manager-card__status {
+  color: rgb(145 56 49);
+}
+
+.reminder-manager-card[data-status='overdue']
+  .reminder-manager-card__status::before {
+  background: rgb(150 42 38);
+}
+
+.reminder-manager-card__message {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: rgb(83 77 68);
+  font-size: 10px;
+  font-weight: 520;
+  line-height: 15px;
+  white-space: pre-wrap;
+}
+
+.reminder-manager-card__schedule {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+  color: rgb(105 96 85);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 610;
+  line-height: 14px;
+}
+
+.reminder-manager-card__actions,
+.reminder-manager-card__confirmation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  margin-top: 7px;
+}
+
+.reminder-manager-card__action {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid rgb(42 39 34 / 18%);
+  border-radius: 7px;
+  background: rgb(255 254 251);
+  color: rgb(72 66 58);
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 680;
+  line-height: 16px;
+}
+
+.reminder-manager-card__action:hover {
+  border-color: rgb(42 39 34 / 30%);
+  background: rgb(246 243 237);
+}
+
+.reminder-manager-card__action--danger {
+  color: rgb(145 56 49);
+}
+
+.reminder-manager-card__action--danger:hover {
+  border-color: rgb(150 42 38 / 34%);
+  background: rgb(252 244 241);
+  color: rgb(126 38 34);
+}
+
+.reminder-manager-card__action:focus-visible {
+  outline: 2px solid rgb(122 82 25 / 48%);
+  outline-offset: 1px;
+}
+
+.reminder-manager-card__action:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.reminder-manager-card__confirmation {
+  margin-top: 7px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgb(248 239 235);
+}
+
+.reminder-manager-card__confirmation p {
+  margin: 0;
+  color: rgb(102 48 43);
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 15px;
+}
+
+.reminder-manager-card__confirmation-actions {
+  margin-top: 5px;
+}
+
+.reminder-manager-card__error {
+  margin: 6px 0 0;
+  color: rgb(150 42 38);
+  font-size: 9px;
+  font-weight: 620;
+  line-height: 14px;
+}
+
+.reminder-manager-panel__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid rgb(42 39 34 / 12%);
+  margin-top: 8px;
+  color: rgb(101 93 82);
+  font-size: 9px;
+  font-weight: 580;
+  line-height: 14px;
+}
+
 .reminder-widget {
   position: relative;
   display: grid;
@@ -799,7 +1072,9 @@ body {
   }
 
   .floating-companion-panel__input,
-  .floating-companion-panel__button {
+  .floating-companion-panel__button,
+  .reminder-manager-panel__tab,
+  .reminder-manager-card__action {
     border-color: ButtonText;
     background: Canvas;
     color: CanvasText;
