@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+import type { DailyPlannerBriefing } from '../shared/dailyPlanner';
 import type { RuntimeSettings } from '../shared/settings';
 import type {
   PomodoroCompletionListener,
@@ -17,6 +18,7 @@ import type {
   AIAskResult,
   CompanionBridge,
   CursorPositionListener,
+  DailyPlannerPanelRequestListener,
   ReminderCreationPanelRequestListener,
   ReminderFiredListener,
   ReminderManagerPanelRequestListener,
@@ -45,6 +47,8 @@ const IPC_CHANNELS = {
     'reminders:creation-panel-requested',
   reminderManagerPanelRequested:
     'reminders:manager-panel-requested',
+  dailyPlannerPanelRequested:
+    'daily-planner:panel-requested',
   reminderFired: 'reminders:fired',
   askAI: 'ai:ask',
   startPomodoro: 'pomodoro:start',
@@ -59,6 +63,7 @@ const IPC_CHANNELS = {
   getReminder: 'reminders:get',
   listReminders: 'reminders:list',
   markReminderCompleted: 'reminders:mark-completed',
+  getDailyPlanner: 'daily-planner:get',
 } as const;
 
 const pomodoroStateListeners = new Set<PomodoroStateListener>();
@@ -74,6 +79,8 @@ const reminderCreationPanelRequestListeners =
   new Set<ReminderCreationPanelRequestListener>();
 const reminderManagerPanelRequestListeners =
   new Set<ReminderManagerPanelRequestListener>();
+const dailyPlannerPanelRequestListeners =
+  new Set<DailyPlannerPanelRequestListener>();
 const reminderFiredListeners = new Set<ReminderFiredListener>();
 const pendingReminderNotifications: ReminderFiredNotification[] = [];
 let latestPomodoroState: PomodoroState | null = null;
@@ -83,6 +90,7 @@ let pendingUserNamePanelRequest = false;
 let pendingStickyMessagePanelRequest = false;
 let pendingReminderCreationPanelRequest = false;
 let pendingReminderManagerPanelRequest = false;
+let pendingDailyPlannerPanelRequest = false;
 
 ipcRenderer.on(IPC_CHANNELS.userNamePanelRequested, () => {
   if (userNamePanelRequestListeners.size === 0) {
@@ -124,6 +132,17 @@ ipcRenderer.on(IPC_CHANNELS.reminderManagerPanelRequested, () => {
   }
 
   for (const listener of reminderManagerPanelRequestListeners) {
+    listener();
+  }
+});
+
+ipcRenderer.on(IPC_CHANNELS.dailyPlannerPanelRequested, () => {
+  if (dailyPlannerPanelRequestListeners.size === 0) {
+    pendingDailyPlannerPanelRequest = true;
+    return;
+  }
+
+  for (const listener of dailyPlannerPanelRequestListeners) {
     listener();
   }
 });
@@ -296,6 +315,24 @@ const companionBridge: CompanionBridge = Object.freeze({
       reminderManagerPanelRequestListeners.delete(listener);
     };
   },
+  onDailyPlannerPanelRequested: (
+    listener: DailyPlannerPanelRequestListener,
+  ) => {
+    dailyPlannerPanelRequestListeners.add(listener);
+
+    if (pendingDailyPlannerPanelRequest) {
+      queueMicrotask(() => {
+        if (dailyPlannerPanelRequestListeners.has(listener)) {
+          pendingDailyPlannerPanelRequest = false;
+          listener();
+        }
+      });
+    }
+
+    return () => {
+      dailyPlannerPanelRequestListeners.delete(listener);
+    };
+  },
   onReminderFired: (listener: ReminderFiredListener) => {
     reminderFiredListeners.add(listener);
 
@@ -400,6 +437,10 @@ const companionBridge: CompanionBridge = Object.freeze({
       IPC_CHANNELS.markReminderCompleted,
       id,
     ) as Promise<Reminder>,
+  getDailyPlanner: () =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.getDailyPlanner,
+    ) as Promise<DailyPlannerBriefing>,
   onRuntimeSettingsChanged: (listener: RuntimeSettingsChangeListener) => {
     const handleRuntimeSettingsChanged = (
       _event: Electron.IpcRendererEvent,

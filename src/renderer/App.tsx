@@ -10,6 +10,7 @@ import {
   PERSONALITY_TRIGGERS,
   personalityService,
 } from '../personality';
+import type { DailyPlannerBriefing } from '../shared/dailyPlanner';
 import {
   createReminderUpdateInput,
   type ReminderManagerView,
@@ -32,6 +33,10 @@ import {
   CompanionWidget,
   CompanionWidgetStack,
 } from './components/CompanionWidgetStack';
+import {
+  DailyPlannerPanel,
+  type DailyPlannerPanelDismissReason,
+} from './components/DailyPlannerPanel';
 import {
   PomodoroDurationPanel,
   type PomodoroDurationPanelDismissReason,
@@ -167,6 +172,11 @@ export function App() {
   ] = useState(0);
   const [reminderManagerView, setReminderManagerView] =
     useState<ReminderManagerView>('upcoming');
+  const [dailyPlannerOpen, setDailyPlannerOpen] = useState(false);
+  const [dailyPlannerPresent, setDailyPlannerPresent] =
+    useState(false);
+  const [dailyPlannerRequestSequence, setDailyPlannerRequestSequence] =
+    useState(0);
   const pomodoroState = usePomodoroState();
   const settings = useRuntimeSettings();
   const speechBubble = useSpeechBubble();
@@ -552,6 +562,30 @@ export function App() {
     [],
   );
 
+  const handleDailyPlannerDismiss = useCallback(
+    (_reason: DailyPlannerPanelDismissReason): void => {
+      setDailyPlannerOpen(false);
+    },
+    [],
+  );
+
+  const handleDailyPlannerAfterClose = useCallback((): void => {
+    setDailyPlannerPresent(false);
+  }, []);
+
+  const handleDailyPlannerLoad = useCallback(
+    async (): Promise<DailyPlannerBriefing> => {
+      const bridge = window.psyduck;
+
+      if (bridge === undefined) {
+        throw new Error('The desktop bridge is unavailable.');
+      }
+
+      return bridge.getDailyPlanner();
+    },
+    [],
+  );
+
   const handleContentHeightChange = useCallback((height: number): void => {
     window.psyduck?.setCompanionContentHeight(height);
   }, []);
@@ -692,6 +726,20 @@ export function App() {
       openReminderManager();
     });
   }, [openReminderManager]);
+
+  useEffect(() => {
+    const bridge = window.psyduck;
+
+    if (bridge === undefined) {
+      return;
+    }
+
+    return bridge.onDailyPlannerPanelRequested(() => {
+      setDailyPlannerRequestSequence((sequence) => sequence + 1);
+      setDailyPlannerPresent(true);
+      setDailyPlannerOpen(true);
+    });
+  }, []);
 
   useEffect(() => {
     const bridge = window.psyduck;
@@ -937,6 +985,7 @@ export function App() {
       data-sticky-message-panel-open={stickyMessagePanelOpen}
       data-reminder-panel-open={reminderPanelOpen}
       data-reminder-manager-open={reminderManagerOpen}
+      data-daily-planner-open={dailyPlannerOpen}
       data-reminder-widget-visible={
         reminderNotifications.current !== null
       }
@@ -946,6 +995,19 @@ export function App() {
         anchor={psyDuckAnchor}
         onContentHeightChange={handleContentHeightChange}
       >
+        {dailyPlannerPresent ? (
+          <CompanionWidget
+            id={COMPANION_WIDGET_IDS.dailyPlannerPanel}
+          >
+            <DailyPlannerPanel
+              key={dailyPlannerRequestSequence}
+              open={dailyPlannerOpen}
+              onDismiss={handleDailyPlannerDismiss}
+              onAfterClose={handleDailyPlannerAfterClose}
+              onLoad={handleDailyPlannerLoad}
+            />
+          </CompanionWidget>
+        ) : null}
         {reminderManagerPresent ? (
           <CompanionWidget
             id={COMPANION_WIDGET_IDS.reminderManagerPanel}

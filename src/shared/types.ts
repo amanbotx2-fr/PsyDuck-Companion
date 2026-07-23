@@ -1,4 +1,5 @@
 import type { AIModel, AIResponse } from '../ai/AIProvider';
+import type { DailyPlannerBriefing } from './dailyPlanner';
 import type {
   PomodoroCompletionListener,
   PomodoroCustomDurationRequestListener,
@@ -31,6 +32,7 @@ export type UserNamePanelRequestListener = () => void;
 export type StickyMessagePanelRequestListener = () => void;
 export type ReminderCreationPanelRequestListener = () => void;
 export type ReminderManagerPanelRequestListener = () => void;
+export type DailyPlannerPanelRequestListener = () => void;
 export type ReminderFiredListener = (
   notification: ReminderFiredNotification,
 ) => void;
@@ -89,6 +91,9 @@ export interface CompanionBridge {
   readonly onReminderManagerPanelRequested: (
     listener: ReminderManagerPanelRequestListener,
   ) => () => void;
+  readonly onDailyPlannerPanelRequested: (
+    listener: DailyPlannerPanelRequestListener,
+  ) => () => void;
   readonly onReminderFired: (
     listener: ReminderFiredListener,
   ) => () => void;
@@ -116,6 +121,7 @@ export interface CompanionBridge {
   readonly getReminder: (id: string) => Promise<Reminder | null>;
   readonly listReminders: () => Promise<readonly Reminder[]>;
   readonly markReminderCompleted: (id: string) => Promise<Reminder>;
+  readonly getDailyPlanner: () => Promise<DailyPlannerBriefing>;
   readonly onRuntimeSettingsChanged: (
     listener: RuntimeSettingsChangeListener,
   ) => () => void;

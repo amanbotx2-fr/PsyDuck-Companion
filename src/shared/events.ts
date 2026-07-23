@@ -15,6 +15,8 @@ export const IPC_CHANNELS = {
     'reminders:creation-panel-requested',
   reminderManagerPanelRequested:
     'reminders:manager-panel-requested',
+  dailyPlannerPanelRequested:
+    'daily-planner:panel-requested',
   reminderFired: 'reminders:fired',
   getPreferencesSettings: 'preferences-settings:get',
   updatePreferencesSettings: 'preferences-settings:update',
@@ -34,4 +36,5 @@ export const IPC_CHANNELS = {
   getReminder: 'reminders:get',
   listReminders: 'reminders:list',
   markReminderCompleted: 'reminders:mark-completed',
+  getDailyPlanner: 'daily-planner:get',
 } as const;

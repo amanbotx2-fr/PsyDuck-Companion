@@ -31,6 +31,7 @@ export interface ApplicationMenuActions {
   readonly requestStickyMessage: () => void;
   readonly requestReminderCreation: () => void;
   readonly requestReminderManagement: () => void;
+  readonly requestDailyPlanner: () => void;
 }
 
 const createIntervalMenu = (
@@ -117,6 +118,10 @@ export const createCompanionContextMenu = (
               click: actions.requestReminderManagement,
             },
           ],
+        },
+        {
+          label: 'Daily Planner…',
+          click: actions.requestDailyPlanner,
         },
         { type: 'separator' },
         {

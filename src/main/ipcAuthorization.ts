@@ -25,6 +25,7 @@ export const RENDERER_CAPABILITIES = {
     IPC_CHANNELS.getReminder,
     IPC_CHANNELS.listReminders,
     IPC_CHANNELS.markReminderCompleted,
+    IPC_CHANNELS.getDailyPlanner,
   ],
   preferences: [
     IPC_CHANNELS.getPreferencesSettings,

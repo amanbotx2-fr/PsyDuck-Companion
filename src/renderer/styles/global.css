@@ -821,6 +821,104 @@ body {
   line-height: 14px;
 }
 
+.daily-planner-panel {
+  padding: 12px 12px 10px;
+}
+
+.daily-planner-panel
+  .floating-companion-panel__header {
+  margin-bottom: 8px;
+}
+
+.daily-planner-panel__content {
+  min-width: 0;
+}
+
+.daily-planner-panel__greeting {
+  margin: 0 0 11px;
+  overflow-wrap: anywhere;
+  color: rgb(48 44 38);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 17px;
+}
+
+.daily-planner-panel__section-title {
+  margin: 0 0 5px;
+  color: rgb(101 93 82);
+  font-size: 9px;
+  font-weight: 720;
+  letter-spacing: 0.06em;
+  line-height: 13px;
+  text-transform: uppercase;
+}
+
+.daily-planner-panel__schedule {
+  max-height: 246px;
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
+}
+
+.daily-planner-panel__item {
+  display: grid;
+  min-width: 0;
+  padding: 8px 1px;
+  border-top: 1px solid rgb(42 39 34 / 12%);
+  align-items: baseline;
+  gap: 8px;
+  grid-template-columns: 55px minmax(0, 1fr);
+}
+
+.daily-planner-panel__item:last-child {
+  border-bottom: 1px solid rgb(42 39 34 / 12%);
+}
+
+.daily-planner-panel__time {
+  color: rgb(105 96 85);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.daily-planner-panel__reminder-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: rgb(36 33 29);
+  font-size: 11px;
+  font-weight: 680;
+  line-height: 15px;
+}
+
+.daily-planner-panel__empty,
+.daily-planner-panel__state {
+  display: grid;
+  min-height: 82px;
+  margin: 0;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  color: rgb(101 93 82);
+  font-size: 11px;
+  font-weight: 550;
+  line-height: 16px;
+  text-align: center;
+}
+
+.daily-planner-panel__state p {
+  margin: 0;
+}
+
+.daily-planner-panel__footer {
+  padding-top: 9px;
+  margin-top: 8px;
+  border-top: 1px solid rgb(42 39 34 / 12%);
+}
+
 .sticky-message-widget {
   position: relative;
   display: flex;

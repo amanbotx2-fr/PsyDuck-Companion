@@ -67,6 +67,7 @@ import {
   CredentialManager,
   CredentialStorageError,
 } from './CredentialManager';
+import { DailyPlannerService } from './DailyPlannerService';
 import {
   AIRequestManager,
   AIRequestPolicyError,
@@ -116,6 +117,7 @@ let assistantActionResponseProcessor:
 let pomodoroManager: PomodoroManager | null = null;
 let reminderScheduler: ReminderScheduler | null = null;
 let reminderService: ReminderService | null = null;
+let dailyPlannerService: DailyPlannerService | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
 let unsubscribeFromPomodoroState: (() => void) | null = null;
 let unsubscribeFromPomodoroCompletion: (() => void) | null = null;
@@ -178,6 +180,14 @@ const getReminderService = (): ReminderService => {
   }
 
   return reminderService;
+};
+
+const getDailyPlannerService = (): DailyPlannerService => {
+  if (dailyPlannerService === null) {
+    throw new Error('Daily planner service is not initialized.');
+  }
+
+  return dailyPlannerService;
 };
 
 const handleSystemResume = (): void => {
@@ -626,6 +636,31 @@ const requestReminderManagement = (): void => {
   }
 };
 
+const requestDailyPlanner = (): void => {
+  const targetWindow = openMainWindow();
+  targetWindow.show();
+  targetWindow.focus();
+
+  const sendRequest = (): void => {
+    if (
+      targetWindow.isDestroyed() ||
+      targetWindow.webContents.isDestroyed()
+    ) {
+      return;
+    }
+
+    targetWindow.webContents.send(
+      IPC_CHANNELS.dailyPlannerPanelRequested,
+    );
+  };
+
+  if (targetWindow.webContents.isLoadingMainFrame()) {
+    targetWindow.webContents.once('did-finish-load', sendRequest);
+  } else {
+    sendRequest();
+  }
+};
+
 const getMenuActions = (): ApplicationMenuActions => ({
   showCompanion: showMainWindow,
   openPreferences,
@@ -650,6 +685,7 @@ const getMenuActions = (): ApplicationMenuActions => ({
   requestStickyMessage,
   requestReminderCreation,
   requestReminderManagement,
+  requestDailyPlanner,
 });
 
 const handleShowCompanionContextMenu = (
@@ -755,6 +791,11 @@ const handleMarkReminderCompleted = (
   _event: IpcMainInvokeEvent,
   id: unknown,
 ) => getReminderService().markCompleted(id);
+
+const handleGetDailyPlanner = (_event: IpcMainInvokeEvent) =>
+  getDailyPlannerService().getBriefing(
+    getSettingsService().get().userName,
+  );
 
 const handleSetCompanionContentHeight = (
   event: IpcMainEvent,
@@ -1153,6 +1194,13 @@ const registerIpcHandlers = (): void => {
     ),
   );
   ipcMain.handle(
+    IPC_CHANNELS.getDailyPlanner,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getDailyPlanner,
+      handleGetDailyPlanner,
+    ),
+  );
+  ipcMain.handle(
     IPC_CHANNELS.getPreferencesSettings,
     ipcAuthorizer.protectInvoke(
       IPC_CHANNELS.getPreferencesSettings,
@@ -1218,6 +1266,7 @@ const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.getReminder);
   ipcMain.removeHandler(IPC_CHANNELS.listReminders);
   ipcMain.removeHandler(IPC_CHANNELS.markReminderCompleted);
+  ipcMain.removeHandler(IPC_CHANNELS.getDailyPlanner);
   ipcMain.removeHandler(IPC_CHANNELS.getPreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updatePreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updateAiConfiguration);
@@ -1265,6 +1314,7 @@ void app.whenReady().then(async () => {
   }
 
   reminderService = new ReminderService(settingsService);
+  dailyPlannerService = new DailyPlannerService(reminderService);
   assistantActionResponseProcessor = new AssistantActionResponseProcessor(
     new AssistantActionExecutor({
       reminderService,
@@ -1334,6 +1384,7 @@ app.once('before-quit', () => {
   pomodoroManager?.dispose();
   pomodoroManager = null;
   assistantActionResponseProcessor = null;
+  dailyPlannerService = null;
   reminderService = null;
   const activeAIService = aiService;
   aiService = null;
