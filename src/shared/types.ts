@@ -22,6 +22,10 @@ import type {
   PreferencesSettingsPatch,
   RuntimeSettings,
 } from './settings';
+import type {
+  UpdateStatus,
+  UpdateStatusListener,
+} from './updates';
 
 export interface ScreenPoint {
   readonly x: number;
@@ -142,6 +146,11 @@ export interface PreferencesBridge {
   ) => Promise<PreferencesSettings>;
   readonly listAIModels: () => Promise<AIModelListResult>;
   readonly testAIConnection: () => Promise<AIConnectionTestResult>;
+  readonly getUpdateStatus: () => Promise<UpdateStatus>;
+  readonly checkForUpdates: () => Promise<UpdateStatus>;
+  readonly onUpdateStatusChanged: (
+    listener: UpdateStatusListener,
+  ) => () => void;
   readonly onRuntimeSettingsChanged: (
     listener: RuntimeSettingsChangeListener,
   ) => () => void;

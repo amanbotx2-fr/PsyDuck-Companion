@@ -1,6 +1,7 @@
 {
   "name": "ducky-desktop-companion",
   "productName": "Ducky",
+  "desktopName": "ducky.desktop",
   "version": "0.1.0",
   "private": true,
   "description": "Ducky desktop AI companion.",
@@ -20,10 +21,14 @@
     "build": "npm run clean && npm run typecheck && npm run build:main && npm run build:renderer",
     "test": "npm run build:main && node --test tests/*.test.cjs",
     "dist": "npm run build && npm run clean:artifacts && electron-builder",
+    "dist:mac": "npm run build && npm run clean:artifacts && electron-builder --mac",
+    "dist:win": "npm run build && npm run clean:artifacts && electron-builder --win",
+    "dist:linux": "npm run build && npm run clean:artifacts && electron-builder --linux",
     "start": "electron ."
   },
   "dependencies": {
     "@google/genai": "^2.13.0",
+    "electron-updater": "^6.8.9",
     "ollama": "^0.6.3",
     "openai": "^6.48.0",
     "react": "^19.2.8",

@@ -10,6 +10,7 @@ import {
   type IpcMainInvokeEvent,
   type Tray,
 } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { join } from 'node:path';
 
 import { AIProviderError } from '../ai/AIProvider';
@@ -61,6 +62,7 @@ import type {
   AIModelListResult,
   ScreenPoint,
 } from '../shared/types';
+import type { UpdateStatus } from '../shared/updates';
 import {
   createApplicationMenu,
   createCompanionContextMenu,
@@ -91,6 +93,7 @@ import { ReminderService } from './ReminderService';
 import { getExpectedRendererUrl } from './rendererSecurity';
 import { SettingsService } from './SettingsService';
 import { createSystemTray } from './tray';
+import { UpdateService } from './UpdateService';
 import {
   createMainWindow,
   setCompanionContentHeight,
@@ -128,10 +131,13 @@ let pomodoroManager: PomodoroManager | null = null;
 let reminderScheduler: ReminderScheduler | null = null;
 let reminderService: ReminderService | null = null;
 let dailyPlannerService: DailyPlannerService | null = null;
+let updateService: UpdateService | null = null;
 let unsubscribeFromSettings: (() => void) | null = null;
 let unsubscribeFromPomodoroState: (() => void) | null = null;
 let unsubscribeFromPomodoroCompletion: (() => void) | null = null;
 let unsubscribeFromReminderEvents: (() => void) | null = null;
+let unsubscribeFromUpdateStatus: (() => void) | null = null;
+let automaticUpdateChecksEnabled = false;
 let pendingPomodoroCompletion = false;
 const pendingReminderNotifications: ReminderFiredNotification[] = [];
 let customPomodoroPanelVisible = false;
@@ -198,6 +204,14 @@ const getDailyPlannerService = (): DailyPlannerService => {
   }
 
   return dailyPlannerService;
+};
+
+const getUpdateService = (): UpdateService => {
+  if (updateService === null) {
+    throw new Error('Update service is not initialized.');
+  }
+
+  return updateService;
 };
 
 const handleSystemResume = (): void => {
@@ -737,6 +751,24 @@ const broadcastRuntimeSettings = (settings: AppSettings): void => {
   }
 };
 
+const broadcastUpdateStatus = (status: UpdateStatus): void => {
+  const targetWindow = preferencesWindow;
+
+  if (
+    targetWindow === null ||
+    targetWindow.isDestroyed() ||
+    targetWindow.webContents.isDestroyed() ||
+    targetWindow.webContents.isLoadingMainFrame()
+  ) {
+    return;
+  }
+
+  targetWindow.webContents.send(
+    IPC_CHANNELS.updateStatusChanged,
+    status,
+  );
+};
+
 const applyRuntimeSettings = (settings: AppSettings): void => {
   if (mainWindow !== null && !mainWindow.isDestroyed()) {
     mainWindow.setAlwaysOnTop(settings.general.alwaysOnTop);
@@ -863,6 +895,14 @@ const handleGetPreferencesSettings = (
 ): PreferencesSettings => {
   return toPreferencesSettings(getSettingsService().get());
 };
+
+const handleGetUpdateStatus = (
+  _event: IpcMainInvokeEvent,
+): UpdateStatus => getUpdateService().getStatus();
+
+const handleCheckForUpdates = (
+  _event: IpcMainInvokeEvent,
+): Promise<UpdateStatus> => getUpdateService().checkForUpdates();
 
 const handleUpdatePreferencesSettings = async (
   _event: IpcMainInvokeEvent,
@@ -1286,6 +1326,20 @@ const registerIpcHandlers = (): void => {
     ),
   );
   ipcMain.handle(
+    IPC_CHANNELS.getUpdateStatus,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.getUpdateStatus,
+      handleGetUpdateStatus,
+    ),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.checkForUpdates,
+    ipcAuthorizer.protectInvoke(
+      IPC_CHANNELS.checkForUpdates,
+      handleCheckForUpdates,
+    ),
+  );
+  ipcMain.handle(
     IPC_CHANNELS.askAI,
     ipcAuthorizer.protectInvoke(IPC_CHANNELS.askAI, handleAskAI),
   );
@@ -1334,6 +1388,8 @@ const unregisterIpcHandlers = (): void => {
   ipcMain.removeHandler(IPC_CHANNELS.getPreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updatePreferencesSettings);
   ipcMain.removeHandler(IPC_CHANNELS.updateAiConfiguration);
+  ipcMain.removeHandler(IPC_CHANNELS.getUpdateStatus);
+  ipcMain.removeHandler(IPC_CHANNELS.checkForUpdates);
   ipcMain.removeHandler(IPC_CHANNELS.askAI);
   ipcMain.removeHandler(IPC_CHANNELS.listAIModels);
   ipcMain.removeHandler(IPC_CHANNELS.testAIConnection);
@@ -1378,6 +1434,19 @@ void app.whenReady().then(async () => {
   } catch (error) {
     console.error('[settings] load_failed', error);
   }
+
+  updateService = new UpdateService(autoUpdater, {
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+  });
+  updateService.initialize();
+  automaticUpdateChecksEnabled =
+    settingsService.get().updates.automatic;
+  updateService.setAutomaticChecksEnabled(
+    automaticUpdateChecksEnabled,
+  );
+  unsubscribeFromUpdateStatus =
+    updateService.subscribe(broadcastUpdateStatus);
 
   reminderService = new ReminderService(settingsService);
   dailyPlannerService = new DailyPlannerService(reminderService);
@@ -1427,9 +1496,21 @@ void app.whenReady().then(async () => {
   unsubscribeFromSettings = settingsService.subscribe((settings) => {
     applyRuntimeSettings(settings);
     broadcastRuntimeSettings(settings);
+
+    const automaticChecksChanged =
+      settings.updates.automatic !== automaticUpdateChecksEnabled;
+    automaticUpdateChecksEnabled = settings.updates.automatic;
+    updateService?.setAutomaticChecksEnabled(
+      automaticUpdateChecksEnabled,
+    );
+
+    if (automaticChecksChanged && automaticUpdateChecksEnabled) {
+      void updateService?.checkAutomatically();
+    }
   });
 
   app.on('activate', showMainWindow);
+  void updateService.checkAutomatically();
 });
 
 app.once('before-quit', () => {
@@ -1439,6 +1520,10 @@ app.once('before-quit', () => {
   reminderScheduler = null;
   unsubscribeFromReminderEvents?.();
   unsubscribeFromReminderEvents = null;
+  unsubscribeFromUpdateStatus?.();
+  unsubscribeFromUpdateStatus = null;
+  updateService?.dispose();
+  updateService = null;
   pendingReminderNotifications.length = 0;
   aiRequestManager.cancelAll('application_quit');
   unsubscribeFromSettings?.();

@@ -216,6 +216,10 @@ export interface WaterSettings {
   readonly interval: WaterReminderInterval;
 }
 
+export interface UpdateSettings {
+  readonly automatic: boolean;
+}
+
 export interface AiSettings {
   readonly enabled: boolean;
   readonly provider: AiProviderSelection;
@@ -241,6 +245,7 @@ export interface AppSettings {
   readonly reminders: readonly Reminder[];
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
+  readonly updates: UpdateSettings;
   readonly ai: AiSettings;
   readonly aiModelExplorer: AiModelExplorerSettings;
 }
@@ -266,6 +271,7 @@ export interface PreferencesSettings {
   readonly userName: string;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
+  readonly updates: UpdateSettings;
   readonly ai: PreferencesAiSettings;
   readonly aiModelExplorer: AiModelExplorerSettings;
 }
@@ -279,6 +285,10 @@ export interface GeneralSettingsPatch {
 export interface WaterSettingsPatch {
   readonly enabled?: boolean;
   readonly interval?: WaterReminderInterval;
+}
+
+export interface UpdateSettingsPatch {
+  readonly automatic?: boolean;
 }
 
 export interface AiSettingsPatch {
@@ -300,6 +310,7 @@ export interface SettingsPatch {
   readonly reminders?: readonly Reminder[];
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
+  readonly updates?: UpdateSettingsPatch;
   readonly ai?: AiSettingsPatch;
   readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
 }
@@ -307,6 +318,7 @@ export interface SettingsPatch {
 export interface PreferencesSettingsPatch {
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
+  readonly updates?: UpdateSettingsPatch;
   readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
 }
 
@@ -329,6 +341,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     enabled: true,
     interval: 30,
   },
+  updates: {
+    automatic: false,
+  },
   ai: {
     enabled: false,
     provider: '',
@@ -349,6 +364,7 @@ const GENERAL_SETTING_KEYS = [
   'eyeTracking',
 ] as const;
 const WATER_SETTING_KEYS = ['enabled', 'interval'] as const;
+const UPDATE_SETTING_KEYS = ['automatic'] as const;
 const AI_SETTING_KEYS = [
   'enabled',
   'provider',
@@ -380,6 +396,7 @@ const ROOT_SETTING_KEYS = [
   'reminders',
   'general',
   'water',
+  'updates',
   'ai',
   'aiModelExplorer',
 ] as const;
@@ -460,6 +477,24 @@ const parseWaterPatch = (value: unknown): WaterSettingsPatch | null => {
   return {
     ...(typeof enabled === 'boolean' ? { enabled } : {}),
     ...(isWaterReminderInterval(interval) ? { interval } : {}),
+  };
+};
+
+const parseUpdatePatch = (
+  value: unknown,
+): UpdateSettingsPatch | null => {
+  if (!isRecord(value) || !hasOnlyKeys(value, UPDATE_SETTING_KEYS)) {
+    return null;
+  }
+
+  const { automatic } = value;
+
+  if (automatic !== undefined && typeof automatic !== 'boolean') {
+    return null;
+  }
+
+  return {
+    ...(typeof automatic === 'boolean' ? { automatic } : {}),
   };
 };
 
@@ -590,6 +625,10 @@ export const parseSettingsPatch = (
     value.general === undefined ? undefined : parseGeneralPatch(value.general);
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
+  const updates =
+    value.updates === undefined
+      ? undefined
+      : parseUpdatePatch(value.updates);
   const ai = value.ai === undefined ? undefined : parseAiPatch(value.ai);
   const aiModelExplorer =
     value.aiModelExplorer === undefined
@@ -613,6 +652,7 @@ export const parseSettingsPatch = (
   if (
     general === null ||
     water === null ||
+    updates === null ||
     ai === null ||
     aiModelExplorer === null ||
     userName === null ||
@@ -630,6 +670,7 @@ export const parseSettingsPatch = (
     ...(reminders === undefined ? {} : { reminders }),
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
+    ...(updates === undefined ? {} : { updates }),
     ...(ai === undefined ? {} : { ai }),
     ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
   };
@@ -640,7 +681,12 @@ export const parsePreferencesSettingsPatch = (
 ): PreferencesSettingsPatch | null => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, ['general', 'water', 'aiModelExplorer'])
+    !hasOnlyKeys(value, [
+      'general',
+      'water',
+      'updates',
+      'aiModelExplorer',
+    ])
   ) {
     return null;
   }
@@ -649,6 +695,10 @@ export const parsePreferencesSettingsPatch = (
     value.general === undefined ? undefined : parseGeneralPatch(value.general);
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
+  const updates =
+    value.updates === undefined
+      ? undefined
+      : parseUpdatePatch(value.updates);
   const aiModelExplorer =
     value.aiModelExplorer === undefined
       ? undefined
@@ -657,6 +707,7 @@ export const parsePreferencesSettingsPatch = (
   if (
     general === null ||
     water === null ||
+    updates === null ||
     aiModelExplorer === null
   ) {
     return null;
@@ -665,6 +716,7 @@ export const parsePreferencesSettingsPatch = (
   return {
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
+    ...(updates === undefined ? {} : { updates }),
     ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
   };
 };
@@ -712,6 +764,10 @@ export const mergeSettings = (
     ...settings.water,
     ...patch.water,
   },
+  updates: {
+    ...settings.updates,
+    ...patch.updates,
+  },
   ai: {
     ...settings.ai,
     ...patch.ai,
@@ -749,6 +805,7 @@ export const toPreferencesSettings = (
   settings: AppSettings,
 ): PreferencesSettings => ({
   ...toRuntimeSettings(settings),
+  updates: { ...settings.updates },
   ai: {
     enabled: settings.ai.enabled,
     provider: settings.ai.provider,
@@ -785,6 +842,10 @@ export const mergePreferencesSettings = (
   water: {
     ...settings.water,
     ...patch.water,
+  },
+  updates: {
+    ...settings.updates,
+    ...patch.updates,
   },
   ai: { ...settings.ai },
   aiModelExplorer: {
@@ -826,6 +887,7 @@ export const parseSettings = (value: unknown): AppSettings | null => {
     reminders: value.reminders,
     general: value.general,
     water: value.water,
+    ...(value.updates === undefined ? {} : { updates: value.updates }),
     ai: aiPatchValue,
     ...(value.aiModelExplorer === undefined
       ? {}

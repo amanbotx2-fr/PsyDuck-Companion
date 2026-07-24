@@ -3,9 +3,20 @@ productName: Ducky
 executableName: Ducky
 copyright: Copyright © 2026 Aman
 asar: true
+compression: maximum
+
+electronFuses:
+  # Apple Silicon requires a new ad-hoc signature after the Electron binary is mutated.
+  resetAdHocDarwinSignature: true
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
 
 directories:
   output: release
+  buildResources: assets
 
 files:
   - dist/**/*
@@ -17,8 +28,14 @@ extraResources:
   - from: assets/icons
     to: assets/icons
 
+publish:
+  provider: github
+  owner: amanbotx2-fr
+  repo: PsyDuck-Companion
+
 mac:
-  icon: assets/icons/icon.icns
+  icon: icons/icon.icns
+  identity: null
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -30,12 +47,75 @@ mac:
     - zip
 
 win:
-  icon: assets/icons/icon.ico
+  icon: icons/icon.ico
+  requestedExecutionLevel: asInvoker
+  signExecutable: false
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: msi
+      arch:
+        - x64
 
 linux:
-  icon: assets/icons/icon.png
+  icon: icons/icon.png
+  syncDesktopName: true
+  category: Utility
+  maintainer: Aman
+  vendor: Aman
+  synopsis: Ducky desktop AI companion
+  description: Ducky is a desktop AI companion for focused work and lightweight personal assistance.
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
 
 dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  title: ${productName} ${version}
   sign: false
+  contents:
+    - x: 140
+      y: 200
+      type: file
+    - x: 400
+      y: 200
+      type: link
+      path: /Applications
+
+nsis:
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Ducky
+  uninstallDisplayName: Ducky
+  installerIcon: icons/icon.ico
+  uninstallerIcon: icons/icon.ico
+  deleteAppDataOnUninstall: false
+
+msi:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  oneClick: false
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Ducky
+  warningsAsErrors: true
+
+appImage:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+deb:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+  packageCategory: utils
+  priority: optional
 
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}

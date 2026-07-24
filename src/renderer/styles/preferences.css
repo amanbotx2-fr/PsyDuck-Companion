@@ -223,6 +223,13 @@ select {
   justify-content: flex-end;
 }
 
+.settings-value {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-switch {
   position: relative;
   width: 42px;

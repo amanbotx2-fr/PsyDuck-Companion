@@ -33,6 +33,8 @@ export const RENDERER_CAPABILITIES = {
     IPC_CHANNELS.updateAiConfiguration,
     IPC_CHANNELS.listAIModels,
     IPC_CHANNELS.testAIConnection,
+    IPC_CHANNELS.getUpdateStatus,
+    IPC_CHANNELS.checkForUpdates,
   ],
 } as const;
 

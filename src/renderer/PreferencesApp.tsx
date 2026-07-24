@@ -28,6 +28,7 @@ import {
 import { personalityService } from '../personality';
 import { AIModelExplorer } from './components/AIModelExplorer';
 import { usePreferencesSettings } from './hooks/usePreferencesSettings';
+import { useUpdateStatus } from './hooks/useUpdateStatus';
 
 interface PreferenceRowProps {
   readonly control: ReactNode;
@@ -113,6 +114,7 @@ export function PreferencesApp() {
     update,
     updateAiConfiguration,
   } = usePreferencesSettings();
+  const { updateStatus, checkForUpdates } = useUpdateStatus();
   const [aiDraft, setAiDraft] =
     useState<PreferencesAiSettings>(settings.ai);
   const [aiDirty, setAiDirty] = useState(false);
@@ -131,6 +133,9 @@ export function PreferencesApp() {
   const [modelLoadingStatus, setModelLoadingStatus] =
     useState<ModelLoadingStatus>(INITIAL_MODEL_LOADING_STATUS);
   const settingsAreLoading = status === 'loading';
+  const updateCheckInProgress =
+    updateStatus?.phase === 'checking' ||
+    updateStatus?.phase === 'downloading';
   const aiActionInProgress =
     connectionStatus.phase === 'testing' ||
     modelLoadingStatus.phase === 'loading' ||
@@ -503,6 +508,26 @@ export function PreferencesApp() {
       save({ water: { interval } });
     }
   };
+  const updateStatusMessage =
+    updateStatus === null
+      ? 'Loading update status…'
+      : updateStatus.phase === 'idle'
+        ? 'No update check is running.'
+        : updateStatus.phase === 'checking'
+          ? 'Checking for updates…'
+          : updateStatus.phase === 'available'
+            ? `Version ${updateStatus.availableVersion} is available.`
+            : updateStatus.phase === 'not-available'
+              ? 'Ducky is up to date.'
+              : updateStatus.phase === 'downloading'
+                ? `Downloading${
+                    updateStatus.availableVersion === null
+                      ? ''
+                      : ` version ${updateStatus.availableVersion}`
+                  }: ${Math.round(updateStatus.percent)}%.`
+                : updateStatus.phase === 'downloaded'
+                  ? `Version ${updateStatus.availableVersion} has been downloaded.`
+                  : updateStatus.message;
 
   return (
     <main className="preferences-page">
@@ -629,6 +654,63 @@ export function PreferencesApp() {
                 </option>
               ))}
             </select>
+          }
+        />
+      </section>
+
+      <section
+        className="preferences-section"
+        aria-labelledby="updates-title"
+      >
+        <div className="preferences-section__heading">
+          <h2 id="updates-title">Updates</h2>
+          <p>Application releases</p>
+        </div>
+
+        <PreferenceRow
+          htmlFor="current-version"
+          label="Current version"
+          description="The version of Ducky installed on this computer."
+          control={
+            <output className="settings-value" id="current-version">
+              {updateStatus?.currentVersion ?? 'Loading…'}
+            </output>
+          }
+        />
+
+        <PreferenceRow
+          htmlFor="automatic-updates"
+          label="Automatic update checks"
+          description="Check once when Ducky starts. Downloads remain manual."
+          control={
+            <SettingsSwitch
+              id="automatic-updates"
+              label="Automatic update checks"
+              checked={settings.updates.automatic}
+              disabled={settingsAreLoading}
+              onChange={(automatic) => {
+                save({ updates: { automatic } });
+              }}
+            />
+          }
+        />
+
+        <PreferenceRow
+          htmlFor="check-for-updates"
+          label="Check for updates"
+          description={updateStatusMessage}
+          control={
+            <button
+              className="settings-button settings-button--secondary"
+              id="check-for-updates"
+              type="button"
+              disabled={updateStatus === null || updateCheckInProgress}
+              onClick={() => {
+                void checkForUpdates();
+              }}
+            >
+              {updateCheckInProgress ? 'Checking…' : 'Check Now'}
+            </button>
           }
         />
       </section>
@@ -983,8 +1065,8 @@ export function PreferencesApp() {
       </section>
 
       <footer className="preferences-footer">
-        General and hydration changes save automatically. AI changes apply
-        when saved.
+        General, hydration, and update changes save automatically. AI
+        changes apply when saved.
       </footer>
     </main>
   );

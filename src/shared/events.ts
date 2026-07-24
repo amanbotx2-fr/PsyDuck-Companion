@@ -24,6 +24,9 @@ export const IPC_CHANNELS = {
   askAI: 'ai:ask',
   listAIModels: 'ai:list-models',
   testAIConnection: 'ai:test-connection',
+  getUpdateStatus: 'updates:status:get',
+  checkForUpdates: 'updates:check',
+  updateStatusChanged: 'updates:status-changed',
   startPomodoro: 'pomodoro:start',
   customPomodoroPanelClosed: 'pomodoro:custom-panel-closed',
   customPomodoroDurationRequested:
