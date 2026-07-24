@@ -326,7 +326,7 @@ export class OllamaProvider implements AIProvider {
           message = 'The Ollama request was cancelled.';
           break;
         case 'response_too_large':
-          message = 'Ollama returned more data than PsyDuck can safely process.';
+          message = 'Ollama returned more data than Ducky can safely process.';
           break;
         case 'timeout':
           message = 'Ollama did not respond in time.';

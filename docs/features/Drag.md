@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Drag lets the user reposition PsyDuck through direct manipulation. The character visibly stretches while held, follows the pointer without detaching from the grab point, and converts release motion into a bounded bounce and landing. The interaction is responsive first and expressive second.
+Drag lets the user reposition Ducky through direct manipulation. The character visibly stretches while held, follows the pointer without detaching from the grab point, and converts release motion into a bounded bounce and landing. The interaction is responsive first and expressive second.
 
 ## User story
 
-As a user arranging my desktop, I can pick PsyDuck up and move it to a comfortable position. The character reacts with weight and elasticity, then settles exactly where I leave it without blocking my work.
+As a user arranging my desktop, I can pick Ducky up and move it to a comfortable position. The character reacts with weight and elasticity, then settles exactly where I leave it without blocking my work.
 
 ## Goals
 
@@ -20,7 +20,7 @@ As a user arranging my desktop, I can pick PsyDuck up and move it to a comfortab
 
 ## Non goals
 
-- Throwing PsyDuck indefinitely, damaging the character, or creating chaotic desktop motion.
+- Throwing Ducky indefinitely, damaging the character, or creating chaotic desktop motion.
 - Dragging with keyboard content, gestures from unrelated applications, or right mouse by default.
 - Snapping to icons, windows, docks, grids, or arbitrary desktop targets.
 - Allowing the character to become permanently unreachable.
@@ -28,13 +28,13 @@ As a user arranging my desktop, I can pick PsyDuck up and move it to a comfortab
 
 # User Experience
 
-The user presses the primary pointer button on an opaque part of PsyDuck. The character compresses slightly at the held area, then stretches as it lifts. Once the pointer moves beyond the drag threshold, PsyDuck follows it with a small, smooth elastic delay. The original grabbed point stays under the pointer, so grabbing the head feels different from grabbing the body edge without causing a position jump.
+The user presses the primary pointer button on an opaque part of Ducky. The character compresses slightly at the held area, then stretches as it lifts. Once the pointer moves beyond the drag threshold, Ducky follows it with a small, smooth elastic delay. The original grabbed point stays under the pointer, so grabbing the head feels different from grabbing the body edge without causing a position jump.
 
-Fast horizontal movement leans and stretches the body slightly along the motion direction. Vertical movement emphasizes lift or downward pull. Deformation remains readable as the same character and never makes the pixel art blurry. Other reactions pause while the user is holding PsyDuck. Passive bubbles disappear; unresolved reminder actions are temporarily hidden.
+Fast horizontal movement leans and stretches the body slightly along the motion direction. Vertical movement emphasizes lift or downward pull. Deformation remains readable as the same character and never makes the pixel art blurry. Other reactions pause while the user is holding Ducky. Passive bubbles disappear; unresolved reminder actions are temporarily hidden.
 
-On release, the most recent hand movement contributes momentum. A slow release drops PsyDuck nearly in place. A faster release carries it a short, capped distance before gravity brings it toward the active display's floor. Contact produces a squash, one or two diminishing bounces, and a stable standing pose. The landing never continues long enough to become distracting.
+On release, the most recent hand movement contributes momentum. A slow release drops Ducky nearly in place. A faster release carries it a short, capped distance before gravity brings it toward the active display's floor. Contact produces a squash, one or two diminishing bounces, and a stable standing pose. The landing never continues long enough to become distracting.
 
-If the user releases near a display edge, PsyDuck collides with the safe work area and remains reachable. Moving between monitors is continuous in virtual desktop space. The companion chooses the display containing the character center; it does not teleport when the pointer crosses a seam.
+If the user releases near a display edge, Ducky collides with the safe work area and remains reachable. Moving between monitors is continuous in virtual desktop space. The companion chooses the display containing the character center; it does not teleport when the pointer crosses a seam.
 
 # Behavior
 
@@ -53,7 +53,7 @@ If the user releases near a display edge, PsyDuck collides with the safe work ar
 13. On ground contact, trigger authored impact frames and bounce using the vertical impact velocity. Apply horizontal friction on every grounded step.
 14. When velocity remains below rest thresholds for two simulation steps, snap the ground point to a valid pixel-aligned resting position, play recovery frames, transition to `Idle`, and schedule persistence.
 
-The user may grab PsyDuck again during Landing. A new valid pointer press immediately cancels dynamic physics and enters a new Drag without playing the remaining recovery. This is the only user-driven interruption with higher priority than Drag/Landing.
+The user may grab Ducky again during Landing. A new valid pointer press immediately cancels dynamic physics and enters a new Drag without playing the remaining recovery. This is the only user-driven interruption with higher priority than Drag/Landing.
 
 The hit region follows opaque character pixels with a small internal tolerance. It excludes particles, ground shadow, speech bubble background outside controls, developer overlay, and transparent atlas padding. The effective minimum reachable grab target may extend a few pixels inward around the torso but must not create a large invisible click blocker.
 
@@ -182,4 +182,4 @@ Tests use deterministic timestamped paths for click-without-drag, slow move, fas
 - Add an optional right-click application menu without changing the primary drag gesture or hit mask.
 - Add authored directional held poses if the final art needs more expression than bounded procedural deformation can provide.
 - Support user-configurable edge resting zones only after validating that snapping does not make repositioning feel imprecise.
-- Add accessibility commands in Settings to move PsyDuck between display corners for users who cannot perform pointer dragging.
+- Add accessibility commands in Settings to move Ducky between display corners for users who cannot perform pointer dragging.

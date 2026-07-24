@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Eye Follow makes PsyDuck acknowledge the pointer without moving its body or demanding attention. Only the pupils change position. The motion is continuous while the pointer is available, constrained by the drawn eye shape, and subordinate to every major behavior.
+Eye Follow makes Ducky acknowledge the pointer without moving its body or demanding attention. Only the pupils change position. The motion is continuous while the pointer is available, constrained by the drawn eye shape, and subordinate to every major behavior.
 
 ## User story
 
-As a developer moving between windows and monitors, I see PsyDuck quietly look toward my cursor so the companion feels aware of the desktop while remaining still and unobtrusive.
+As a developer moving between windows and monitors, I see Ducky quietly look toward my cursor so the companion feels aware of the desktop while remaining still and unobtrusive.
 
 ## Goals
 
@@ -27,11 +27,11 @@ As a developer moving between windows and monitors, I see PsyDuck quietly look t
 
 # User Experience
 
-When PsyDuck is Idle with its normal eyes visible, its pupils rest near the authored center points. Moving the cursor causes both pupils to glide toward it. The perceived direction matches the cursor from the character's face in screen space: a cursor above-left produces an above-left pupil offset even when it is on another monitor.
+When Ducky is Idle with its normal eyes visible, its pupils rest near the authored center points. Moving the cursor causes both pupils to glide toward it. The perceived direction matches the cursor from the character's face in screen space: a cursor above-left produces an above-left pupil offset even when it is on another monitor.
 
 The movement is deliberately small. Eye whites, outline, face, and body remain unchanged. Each pupil stays entirely within its corresponding eye mask. Because the eyes are drawn at slightly different positions and may have different shapes, their final offsets can differ by one logical pixel while still indicating the same direction.
 
-Small pointer movements near the direction boundary do not make the pupils flicker between pixels. Large moves, including crossing displays, settle quickly but smoothly. PsyDuck continues its ordinary blink cadence. A blink closes the eyes, temporarily hides the pupils, and reopens with the pupils already oriented toward the latest cursor position.
+Small pointer movements near the direction boundary do not make the pupils flicker between pixels. Large moves, including crossing displays, settle quickly but smoothly. Ducky continues its ordinary blink cadence. A blink closes the eyes, temporarily hides the pupils, and reopens with the pupils already oriented toward the latest cursor position.
 
 If the pointer becomes unavailable, no display contains its coordinates, the session locks, or cursor updates stop, the pupils ease to center and stop. There is no error bubble or visible notification.
 

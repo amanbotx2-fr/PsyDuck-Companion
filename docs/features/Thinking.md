@@ -2,13 +2,13 @@
 
 ## Purpose
 
-Thinking mirrors an external generation lifecycle with a restrained character reaction. When a supported integration reports that generation has started, PsyDuck adopts a thinking expression, blinks, occasionally scratches its head, and shows a three-dot bubble. When the matching generation finishes, the behavior ends immediately so the completion reaction can run.
+Thinking mirrors an external generation lifecycle with a restrained character reaction. When a supported integration reports that generation has started, Ducky adopts a thinking expression, blinks, occasionally scratches its head, and shows a three-dot bubble. When the matching generation finishes, the behavior ends immediately so the completion reaction can run.
 
-Thinking represents status only. PsyDuck does not read prompts, responses, application content, or model output, and it does not accept conversational input.
+Thinking represents status only. Ducky does not read prompts, responses, application content, or model output, and it does not accept conversational input.
 
 ## User story
 
-As a developer waiting for a supported tool to finish generating, I can glance at PsyDuck and see a subtle thinking state that stops as soon as the tool reports completion.
+As a developer waiting for a supported tool to finish generating, I can glance at Ducky and see a subtle thinking state that stops as soon as the tool reports completion.
 
 ## Goals
 
@@ -24,19 +24,19 @@ As a developer waiting for a supported tool to finish generating, I can glance a
 
 - Detecting generation by reading screen pixels, prompts, responses, browser content, or clipboard data.
 - Displaying progress, elapsed-time pressure, model names, output text, or an estimated completion time.
-- Letting the user talk to PsyDuck or treating the companion as the generator.
+- Letting the user talk to Ducky or treating the companion as the generator.
 - Repeatedly escalating animation during a long wait.
 - Starting Celebrate for canceled, failed, or stale generation sessions unless the source explicitly reports a successful finish.
 
 # User Experience
 
-When a supported generation begins, PsyDuck completes a very short safe exit from an interruptible lower-priority action, changes to a curious thinking face, and raises a small bubble containing three dots. The bubble is a character expression, not a notification. It stays attached to the character and remains within the current display.
+When a supported generation begins, Ducky completes a very short safe exit from an interruptible lower-priority action, changes to a curious thinking face, and raises a small bubble containing three dots. The bubble is a character expression, not a notification. It stays attached to the character and remains within the current display.
 
-The body is mostly still. Subtle breathing continues. The eyes blink at a calm interval. After the state has lasted long enough, PsyDuck may scratch its head once, then return to the thinking pose. Head scratches are separated by long, irregular cooldowns so a multi-minute generation does not look like a repeated loading spinner.
+The body is mostly still. Subtle breathing continues. The eyes blink at a calm interval. After the state has lasted long enough, Ducky may scratch its head once, then return to the thinking pose. Head scratches are separated by long, irregular cooldowns so a multi-minute generation does not look like a repeated loading spinner.
 
 The dots animate one at a time using discrete pixel states. They do not spin, race, flash, or imply measurable progress. The bubble has no buttons and never takes focus.
 
-When the last active generation reports success, the dots stop immediately, the bubble closes within 100 ms, and Thinking relinquishes the state. The Behavior Engine may then enter Agent Done Celebrate. If the source cancels or fails, PsyDuck quietly returns to Idle without celebrating. If another generation is still active, no visible restart occurs.
+When the last active generation reports success, the dots stop immediately, the bubble closes within 100 ms, and Thinking relinquishes the state. The Behavior Engine may then enter Agent Done Celebrate. If the source cancels or fails, Ducky quietly returns to Idle without celebrating. If another generation is still active, no visible restart occurs.
 
 Drag always takes control immediately. After a drag ends, Thinking resumes if at least one generation remains active. A reminder waits until Thinking completes. Typing activity does not replace Thinking.
 
@@ -187,6 +187,6 @@ Tests cover duplicate starts, unknown finishes, overlapping sources, success/fai
 # Future Improvements
 
 - Add more local integration adapters that provide explicit lifecycle events without screen scraping or content access.
-- Add source-specific enable/disable controls if multiple integrations ship and users need to choose which lifecycle signals affect PsyDuck.
+- Add source-specific enable/disable controls if multiple integrations ship and users need to choose which lifecycle signals affect Ducky.
 - Add a second low-frequency thinking idle variation after art and repetition testing, while maintaining the same maximum motion budget.
 - Add adapter health diagnostics and last-signal timestamps to Developer mode without exposing external content.

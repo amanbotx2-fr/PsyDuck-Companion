@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron';
 import { join } from 'node:path';
 
 import { APP_NAME } from '../shared/constants';
+import { getApplicationIconPath } from './appBranding';
 import { electronPermissionPolicy } from './permissionPolicy';
 import {
   hardenRendererNavigation,
@@ -60,6 +61,7 @@ export const createMainWindow = (
 
   const mainWindow = new BrowserWindow({
     title: APP_NAME,
+    icon: getApplicationIconPath(),
     width: WINDOW_WIDTH,
     height,
     x,

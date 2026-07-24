@@ -1,8 +1,8 @@
 # SECURITY_TASKS.md
 
-# PsyDuck Security Hardening Roadmap
+# Ducky Security Hardening Roadmap
 
-**Project:** PsyDuck Desktop Companion
+**Project:** Ducky Desktop Companion
 
 **Version:** Pre-v1.0
 
@@ -14,7 +14,7 @@
 
 # Overview
 
-This document tracks all security work required before PsyDuck v1.0 is released publicly.
+This document tracks all security work required before Ducky v1.0 is released publicly.
 
 A full security audit identified:
 
@@ -494,7 +494,7 @@ Recommended
 
 # Success Criteria
 
-PsyDuck v1.0 should satisfy:
+Ducky v1.0 should satisfy:
 
 ✓ No Critical vulnerabilities
 

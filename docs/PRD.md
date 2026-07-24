@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-# PsyDuck
+# Ducky
 ### A Pixel Desktop Companion for Developers
 
 **Version:** 1.0
@@ -12,9 +12,9 @@
 
 # 1. Vision
 
-PsyDuck is a tiny pixel-art desktop companion inspired by retro Pokémon games that lives on the user's screen and reacts to everything they do.
+Ducky is a tiny pixel-art desktop companion inspired by retro Pokémon games that lives on the user's screen and reacts to everything they do.
 
-Unlike traditional desktop pets, PsyDuck is designed specifically for developers and AI users. It interacts with the cursor, keyboard, reminders, AI agents, and eventually the operating system itself, making long coding sessions feel more alive and enjoyable.
+Unlike traditional desktop pets, Ducky is designed specifically for developers and AI users. It interacts with the cursor, keyboard, reminders, AI agents, and eventually the operating system itself, making long coding sessions feel more alive and enjoyable.
 
 The goal is not productivity through notifications.
 
@@ -88,7 +88,7 @@ Secondary Audience
 
 When the application launches...
 
-The user sees a tiny pixel PsyDuck standing on the desktop.
+The user sees a tiny pixel Ducky standing on the desktop.
 
 It blinks.
 
@@ -112,7 +112,7 @@ Throughout the day it quietly reacts to what the user is doing.
 
 ### Description
 
-PsyDuck's eyes follow the mouse cursor.
+Ducky's eyes follow the mouse cursor.
 
 ### Behavior
 
@@ -134,7 +134,7 @@ PsyDuck's eyes follow the mouse cursor.
 
 ### Description
 
-The user can pick PsyDuck up.
+The user can pick Ducky up.
 
 ### Behavior
 
@@ -181,7 +181,7 @@ Idle
 
 ### Description
 
-Whenever the user types, PsyDuck begins stepping on tiny keyboard keys.
+Whenever the user types, Ducky begins stepping on tiny keyboard keys.
 
 ### Trigger
 
@@ -209,7 +209,7 @@ Alternate left/right feet.
 
 ### Description
 
-Typing extremely fast causes PsyDuck to panic.
+Typing extremely fast causes Ducky to panic.
 
 ### Trigger
 
@@ -286,7 +286,7 @@ Bubble
 
 ### Description
 
-Whenever an AI tool is generating, PsyDuck starts thinking too.
+Whenever an AI tool is generating, Ducky starts thinking too.
 
 Supported (Future)
 
@@ -310,7 +310,7 @@ Animations
 
 When AI finishes
 
-PsyDuck
+Ducky
 
 - jumps
 - spins
@@ -397,7 +397,7 @@ Idle
 
 # 10. Idle Behaviors
 
-Every few minutes PsyDuck randomly performs one action.
+Every few minutes Ducky randomly performs one action.
 
 Examples
 
@@ -418,7 +418,7 @@ These should feel organic.
 
 # 11. Personality
 
-PsyDuck is
+Ducky is
 
 - Curious
 - Clumsy
@@ -622,7 +622,7 @@ assets/
 
 Every animation should answer one question:
 
-"What would PsyDuck naturally do here?"
+"What would Ducky naturally do here?"
 
 Never animate for the sake of animation.
 

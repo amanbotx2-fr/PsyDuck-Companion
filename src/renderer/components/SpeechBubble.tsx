@@ -219,7 +219,7 @@ export function SpeechBubble({
     >
       {message.variant === 'conversation' ? (
         <div className="speech-bubble__header" aria-hidden="true">
-          <span className="speech-bubble__speaker">PsyDuck</span>
+          <span className="speech-bubble__speaker">Ducky</span>
           {message.pending ? (
             <span className="speech-bubble__state">Responding</span>
           ) : null}

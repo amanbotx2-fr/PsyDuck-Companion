@@ -10,15 +10,15 @@ Developers, designers, students, terminal users, and other people who spend long
 
 ## Product Purpose
 
-PsyDuck is a persistent pixel-art desktop companion that feels alive through small, intentional reactions. It supports focused work, healthy breaks, and direct interactions while remaining visually secondary to the user's primary applications. Success means the companion is dependable, delightful, resource-conscious, and never disruptive.
+Ducky is a persistent pixel-art desktop companion that feels alive through small, intentional reactions. It supports focused work, healthy breaks, and direct interactions while remaining visually secondary to the user's primary applications. Success means the companion is dependable, delightful, resource-conscious, and never disruptive.
 
 ## Brand Personality
 
-Curious, friendly, and playful. PsyDuck is quiet, slightly clumsy, and expressive without becoming loud, demanding, or aggressive.
+Curious, friendly, and playful. Ducky is quiet, slightly clumsy, and expressive without becoming loud, demanding, or aggressive.
 
 ## Anti-references
 
-PsyDuck must not feel like a chatbot, a voice assistant, a notification center, a generic dashboard, or a dense productivity suite. Avoid attention-seeking alerts, decorative motion, noisy controls, non-pixel character treatments, and interfaces that compete with the companion.
+Ducky must not feel like a chatbot, a voice assistant, a notification center, a generic dashboard, or a dense productivity suite. Avoid attention-seeking alerts, decorative motion, noisy controls, non-pixel character treatments, and interfaces that compete with the companion.
 
 ## Design Principles
 

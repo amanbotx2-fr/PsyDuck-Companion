@@ -1,7 +1,7 @@
-import { app, nativeImage, Tray } from 'electron';
-import { join } from 'node:path';
+import { nativeImage, Tray } from 'electron';
 
 import { APP_NAME } from '../shared/constants';
+import { getApplicationIconPath } from './appBranding';
 import { createTrayMenu, type ApplicationMenuActions } from './menus';
 
 const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
@@ -9,10 +9,9 @@ const TRAY_ICON_SIZE = process.platform === 'darwin' ? 18 : 20;
 export const createSystemTray = (
   actions: ApplicationMenuActions,
 ): Tray => {
-  const iconPath = app.isPackaged
-    ? join(process.resourcesPath, 'character/master.png')
-    : join(app.getAppPath(), 'character/master.png');
-  const sourceIcon = nativeImage.createFromPath(iconPath);
+  const sourceIcon = nativeImage.createFromPath(
+    getApplicationIconPath(),
+  );
 
   if (sourceIcon.isEmpty()) {
     throw new Error('The packaged tray icon could not be loaded.');

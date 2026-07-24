@@ -130,7 +130,7 @@ export function ChatInputBubble({
       onSubmit={handleSubmit}
     >
       <label className="visually-hidden" htmlFor="psyduck-chat-input">
-        Ask PsyDuck
+        Ask Ducky
       </label>
       <input
         ref={inputRef}
@@ -138,7 +138,7 @@ export function ChatInputBubble({
         id="psyduck-chat-input"
         type="text"
         value={value}
-        placeholder="Ask PsyDuck…"
+        placeholder="Ask Ducky…"
         autoComplete="off"
         disabled={!open}
         tabIndex={open ? 0 : -1}

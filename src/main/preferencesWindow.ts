@@ -2,6 +2,7 @@ import { BrowserWindow, nativeTheme } from 'electron';
 import { join } from 'node:path';
 
 import { APP_NAME } from '../shared/constants';
+import { getApplicationIconPath } from './appBranding';
 import { electronPermissionPolicy } from './permissionPolicy';
 import {
   hardenRendererNavigation,
@@ -16,6 +17,7 @@ const PREFERENCES_WINDOW_MINIMUM_HEIGHT = 480;
 export const createPreferencesWindow = (): BrowserWindow => {
   const preferencesWindow = new BrowserWindow({
     title: `${APP_NAME} Preferences`,
+    icon: getApplicationIconPath(),
     width: PREFERENCES_WINDOW_WIDTH,
     height: PREFERENCES_WINDOW_HEIGHT,
     minWidth: PREFERENCES_WINDOW_MINIMUM_WIDTH,

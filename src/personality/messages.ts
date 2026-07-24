@@ -43,7 +43,7 @@ export const DEFAULT_PERSONALITY_MESSAGES = {
   welcome: [
     'Ready when you are.',
     'Good to see you.',
-    'PsyDuck is here.',
+    'Ducky is here.',
     'Let’s get started.',
   ],
   providerConnected: [

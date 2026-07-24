@@ -1,8 +1,8 @@
-# PsyDuck Character Bible
+# Ducky Character Bible
 
 ## Purpose
 
-PsyDuck is the mascot of the project.
+Ducky is the mascot of the project.
 
 It is a tiny desktop companion that quietly reacts to the user's actions.
 

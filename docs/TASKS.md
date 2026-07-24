@@ -1,4 +1,4 @@
-# PsyDuck Development Checklist
+# Ducky Development Checklist
 
 ## Phase 0 – Documentation
 

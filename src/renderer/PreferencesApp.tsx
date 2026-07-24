@@ -508,7 +508,7 @@ export function PreferencesApp() {
     <main className="preferences-page">
       <header className="preferences-header">
         <div>
-          <p className="preferences-header__product">PsyDuck</p>
+          <p className="preferences-header__product">Ducky</p>
           <h1>Preferences</h1>
         </div>
         <p
@@ -536,7 +536,7 @@ export function PreferencesApp() {
         <PreferenceRow
           htmlFor="launch-at-startup"
           label="Launch at startup"
-          description="Start PsyDuck when you sign in."
+          description="Start Ducky when you sign in."
           control={
             <SettingsSwitch
               id="launch-at-startup"
@@ -553,7 +553,7 @@ export function PreferencesApp() {
         <PreferenceRow
           htmlFor="always-on-top"
           label="Always on top"
-          description="Keep PsyDuck above ordinary application windows."
+          description="Keep Ducky above ordinary application windows."
           control={
             <SettingsSwitch
               id="always-on-top"
@@ -570,7 +570,7 @@ export function PreferencesApp() {
         <PreferenceRow
           htmlFor="eye-tracking"
           label="Eye tracking"
-          description="Let PsyDuck follow the pointer with its pupils."
+          description="Let Ducky follow the pointer with its pupils."
           control={
             <SettingsSwitch
               id="eye-tracking"

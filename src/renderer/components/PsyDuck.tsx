@@ -424,7 +424,7 @@ export function PsyDuck({
       <img
         className="psyduck"
         src={currentFrame.path}
-        alt="PsyDuck"
+        alt="Ducky"
         draggable={false}
       />
       <div

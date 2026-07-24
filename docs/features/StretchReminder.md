@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Stretch Reminder provides a quiet movement prompt once per hour by having PsyDuck stretch, yawn, and show a brief speech bubble. It is a wellness cue, not a compliance tracker. The user can dismiss it immediately, and every outcome returns the companion to Idle.
+Stretch Reminder provides a quiet movement prompt once per hour by having Ducky stretch, yawn, and show a brief speech bubble. It is a wellness cue, not a compliance tracker. The user can dismiss it immediately, and every outcome returns the companion to Idle.
 
 ## User story
 
@@ -28,9 +28,9 @@ As a developer in a long work session, I receive a subtle hourly cue to change p
 
 # User Experience
 
-After one hour, PsyDuck waits until the user is not dragging it and no higher-priority character action is running. It plants its feet, raises both arms, performs a large but contained stretch, and yawns. Near the end of the stretch, a small speech bubble appears with “Time to stretch!” and a Dismiss action.
+After one hour, Ducky waits until the user is not dragging it and no higher-priority character action is running. It plants its feet, raises both arms, performs a large but contained stretch, and yawns. Near the end of the stretch, a small speech bubble appears with “Time to stretch!” and a Dismiss action.
 
-The animation happens once. Afterward PsyDuck holds a comfortable stretched-or-relaxed pose with only occasional blinking. The card remains attached to the character and does not take focus from the active application. The reminder does not flash, bounce repeatedly, play sound, or appear through the operating-system notification center.
+The animation happens once. Afterward Ducky holds a comfortable stretched-or-relaxed pose with only occasional blinking. The card remains attached to the character and does not take focus from the active application. The reminder does not flash, bounce repeatedly, play sound, or appear through the operating-system notification center.
 
 Dismiss closes the bubble and transitions through a relaxed recovery into Idle. The next reminder is scheduled from the dismissal time using the current interval. If the user ignores the reminder for five minutes, it closes quietly, returns to Idle, and schedules from the timeout time.
 

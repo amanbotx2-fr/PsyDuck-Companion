@@ -2,7 +2,7 @@
 
 ## Scope
 
-PsyDuck has two interface layers: the companion surface and the settings window. The companion surface is primarily animated pixel art with small, temporary speech bubbles and reminder controls. The settings window is a conventional, keyboard-accessible desktop utility. UI supports the character; it must not compete with it or turn routine behaviors into notifications.
+Ducky has two interface layers: the companion surface and the settings window. The companion surface is primarily animated pixel art with small, temporary speech bubbles and reminder controls. The settings window is a conventional, keyboard-accessible desktop utility. UI supports the character; it must not compete with it or turn routine behaviors into notifications.
 
 No UI plays sound, requests conversational input, displays advertising, uses urgency language, or blocks the user's active application.
 
@@ -16,7 +16,7 @@ No UI plays sound, requests conversational input, displays advertising, uses urg
 | Speech bubble | Express character state with concise text or symbols | Usually passive | Bound to the owning behavior |
 | Developer overlay | Diagnose state, frames, physics, and events | Read-only by default | Developer mode only |
 
-The companion window is not a general-purpose panel. It must remain close to the visual bounds of PsyDuck and its active bubble. Settings and diagnostics that require reading, navigation, or data entry belong in the settings window.
+The companion window is not a general-purpose panel. It must remain close to the visual bounds of Ducky and its active bubble. Settings and diagnostics that require reading, navigation, or data entry belong in the settings window.
 
 ## Design Language
 
@@ -173,7 +173,7 @@ The overlay uses a small opaque panel positioned away from the character face an
 
 ## Reminder Cards
 
-A reminder card is a speech bubble with a semantic icon, one-line message, Dismiss action, and Snooze action when the feature supports snoozing. It is visually attached to PsyDuck, not to a screen corner or notification center.
+A reminder card is a speech bubble with a semantic icon, one-line message, Dismiss action, and Snooze action when the feature supports snoozing. It is visually attached to Ducky, not to a screen corner or notification center.
 
 Water layout:
 
@@ -209,7 +209,7 @@ Expression bubbles remain visible for 800–1,600 ms according to their behavior
 
 ## Notifications
 
-PsyDuck uses companion bubbles for routine reminders and state reactions. It does not issue native operating-system notifications in V1. This prevents duplicate surfaces and avoids interrupting the user.
+Ducky uses companion bubbles for routine reminders and state reactions. It does not issue native operating-system notifications in V1. This prevents duplicate surfaces and avoids interrupting the user.
 
 Errors that affect only settings appear inline in Settings. A critical packaged-resource failure may show one non-modal settings banner and keep the fallback companion visible. The application must not send repeated banners for the same error code within one session.
 

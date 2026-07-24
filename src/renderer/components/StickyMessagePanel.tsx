@@ -146,7 +146,7 @@ export function StickyMessagePanel({
       </header>
 
       <p className="visually-hidden" id={descriptionId}>
-        Set one message to keep visible above PsyDuck.
+        Set one message to keep visible above Ducky.
       </p>
 
       <label

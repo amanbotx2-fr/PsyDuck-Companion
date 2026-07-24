@@ -995,7 +995,7 @@ export function App() {
       data-reminder-widget-visible={
         reminderNotifications.current !== null
       }
-      aria-label="PsyDuck desktop companion"
+      aria-label="Ducky desktop companion"
     >
       <CompanionWidgetStack
         anchor={psyDuckAnchor}

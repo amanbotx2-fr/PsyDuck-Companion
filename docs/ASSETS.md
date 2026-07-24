@@ -2,7 +2,7 @@
 
 ## Scope
 
-This document defines how visual assets are authored, exported, validated, loaded, and maintained. PsyDuck uses pixel art exclusively. Runtime transforms may position, scale, or deform approved sprites, but they must not conceal weak source art with filtering, blur, gradients, or antialiasing.
+This document defines how visual assets are authored, exported, validated, loaded, and maintained. Ducky uses pixel art exclusively. Runtime transforms may position, scale, or deform approved sprites, but they must not conceal weak source art with filtering, blur, gradients, or antialiasing.
 
 Source artwork is a build input. Exported PNG files and sprite metadata are runtime inputs. Engineers must never edit generated sprite sheets directly.
 
@@ -348,7 +348,7 @@ Future skins, companions, seasonal sets, and optional behavior packs must use na
 ```text
 src/assets/generated/
   companions/
-    psyduck/
+    ducky/
       default/
       <skin_id>/
   behavior_packs/

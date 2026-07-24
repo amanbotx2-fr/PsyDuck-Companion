@@ -2,11 +2,11 @@
 
 ## Purpose
 
-Typing translates keyboard activity into a quiet “keyboard kneading” animation: PsyDuck alternates its feet over small pixel keys while the user types. The feature reacts to activity cadence only. It never records which keys were pressed or the text being entered.
+Typing translates keyboard activity into a quiet “keyboard kneading” animation: Ducky alternates its feet over small pixel keys while the user types. The feature reacts to activity cadence only. It never records which keys were pressed or the text being entered.
 
 ## User story
 
-As a developer typing in any application, I see PsyDuck begin alternating its feet in rhythm with my activity and settle back to Idle shortly after I stop, including during short pauses and burst typing.
+As a developer typing in any application, I see Ducky begin alternating its feet in rhythm with my activity and settle back to Idle shortly after I stop, including during short pauses and burst typing.
 
 ## Goals
 
@@ -28,11 +28,11 @@ As a developer typing in any application, I see PsyDuck begin alternating its fe
 
 # User Experience
 
-Typing a single isolated key does not necessarily trigger a full animation. When two or more activity pulses arrive within a short activation window, PsyDuck transitions from Idle into a compact kneading pose. Two tiny neutral keyboard-key sprites appear under its feet. The left and right feet press in alternation, giving the impression that the character is helping with the work.
+Typing a single isolated key does not necessarily trigger a full animation. When two or more activity pulses arrive within a short activation window, Ducky transitions from Idle into a compact kneading pose. Two tiny neutral keyboard-key sprites appear under its feet. The left and right feet press in alternation, giving the impression that the character is helping with the work.
 
 At an ordinary typing pace, the cycle is calm and readable. Faster bursts shorten the hold between contacts up to a defined maximum animation rate, but the character never panics, flashes, produces steam, or becomes noisy. Short pauses—such as thinking between words or using a shortcut—keep the pose ready so the next burst continues without restarting.
 
-After keyboard activity stops, PsyDuck completes the current half-step so both feet do not snap midair. The key props retract, the body returns through a short recovery pose, and the state becomes Idle. Total stop latency balances responsiveness with burst support: the default inactivity threshold is 650 ms, followed by at most one half-cycle and a 120–180 ms recovery.
+After keyboard activity stops, Ducky completes the current half-step so both feet do not snap midair. The key props retract, the body returns through a short recovery pose, and the state becomes Idle. Total stop latency balances responsiveness with burst support: the default inactivity threshold is 650 ms, followed by at most one half-cycle and a 120–180 ms recovery.
 
 Typing never creates a speech bubble, notification, sound, counter, or settings prompt. Direct Drag interrupts it. Thinking, reminders, and Celebrate follow the global priority rules. If Typing is preempted, key props disappear during the exit transition and do not remain on screen.
 

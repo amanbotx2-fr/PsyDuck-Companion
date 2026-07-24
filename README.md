@@ -1,6 +1,6 @@
-# PsyDuck
+# Ducky
 
-Electron, React, TypeScript, and Vite foundation for the PsyDuck desktop companion.
+Electron, React, TypeScript, and Vite foundation for the Ducky desktop companion.
 
 ## Requirements
 

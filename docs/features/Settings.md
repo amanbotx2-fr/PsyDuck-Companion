@@ -6,7 +6,7 @@ Settings provides one reliable desktop window for configuring companion scale, r
 
 ## User story
 
-As a user, I can adjust how PsyDuck looks and behaves, control startup and reminder preferences, move configuration between installations, inspect developer diagnostics, and restore safe defaults without editing files.
+As a user, I can adjust how Ducky looks and behaves, control startup and reminder preferences, move configuration between installations, inspect developer diagnostics, and restore safe defaults without editing files.
 
 ## Goals
 
@@ -30,7 +30,7 @@ As a user, I can adjust how PsyDuck looks and behaves, control startup and remin
 
 The user opens Settings from the application menu or defined companion shortcut. If Settings is already open, the existing window comes forward with its current focus and unsaved draft intact. The window follows the operating-system appearance and contains five ordered sections: Companion, Reminders, Window and startup, Data, and Developer mode.
 
-Scale offers crisp supported multipliers. Selecting one updates PsyDuck immediately while keeping its ground point and reachable region stable. Animation speed uses a labeled slider from 0.75× to 1.5×. Always on top and Start at login use switches with immediate platform feedback.
+Scale offers crisp supported multipliers. Selecting one updates Ducky immediately while keeping its ground point and reachable region stable. Animation speed uses a labeled slider from 0.75× to 1.5×. Always on top and Start at login use switches with immediate platform feedback.
 
 Water and Stretch reminders each have an enabled switch and an exact interval control. Water initially shows 45 minutes; Stretch shows 60 minutes. Values are limited to 15–240 minutes in five-minute steps. Help text explains that missed intervals are not replayed after sleep.
 

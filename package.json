@@ -1,8 +1,9 @@
 {
-  "name": "psyduck-desktop-companion",
+  "name": "ducky-desktop-companion",
+  "productName": "Ducky",
   "version": "0.1.0",
   "private": true,
-  "description": "A pixel-art desktop companion for developers.",
+  "description": "Ducky desktop AI companion.",
   "author": "Aman",
   "main": "dist/main/main.js",
   "license": "UNLICENSED",

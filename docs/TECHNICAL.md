@@ -2,13 +2,13 @@
 
 ## Scope
 
-This document defines the implementation contract for the PsyDuck desktop application. PsyDuck is a transparent, always-on-top pixel companion. It observes bounded activity signals, converts those signals into character behaviors, renders the result through PixiJS, and exposes configuration through a separate React settings window. It does not provide conversational input, execute user commands, produce audio, or present itself as a system assistant.
+This document defines the implementation contract for the Ducky desktop application. Ducky is a transparent, always-on-top pixel companion. It observes bounded activity signals, converts those signals into character behaviors, renders the result through PixiJS, and exposes configuration through a separate React settings window. It does not provide conversational input, execute user commands, produce audio, or present itself as a system assistant.
 
 The first supported desktop targets are macOS and Windows. Platform-specific capabilities must sit behind typed adapters so the renderer and behavior code remain platform-neutral.
 
 ## System Architecture
 
-PsyDuck uses one Electron main process and two renderer surfaces:
+Ducky uses one Electron main process and two renderer surfaces:
 
 | Surface | Technology | Responsibility |
 | --- | --- | --- |

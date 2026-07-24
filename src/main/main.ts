@@ -95,6 +95,11 @@ import {
   createMainWindow,
   setCompanionContentHeight,
 } from './window';
+import {
+  configureApplicationBranding,
+  initializeApplicationBranding,
+  showAboutDialog,
+} from './appBranding';
 
 const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
@@ -675,6 +680,7 @@ const requestDailyPlanner = (): void => {
 
 const getMenuActions = (): ApplicationMenuActions => ({
   showCompanion: showMainWindow,
+  showAbout: showAboutDialog,
   openPreferences,
   restart: restartApplication,
   quit: quitApplication,
@@ -1349,9 +1355,11 @@ const unregisterIpcHandlers = (): void => {
   );
 };
 
-Menu.setApplicationMenu(createApplicationMenu());
+initializeApplicationBranding();
+Menu.setApplicationMenu(createApplicationMenu(showAboutDialog));
 
 void app.whenReady().then(async () => {
+  configureApplicationBranding();
   const credentialManager = new CredentialManager(safeStorage);
 
   if (!credentialManager.isEncryptionAvailable()) {

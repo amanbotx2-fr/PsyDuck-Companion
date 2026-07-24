@@ -1,6 +1,6 @@
-# PsyDuck Development Roadmap
+# Ducky Development Roadmap
 
-> This document defines the active development roadmap for PsyDuck.
+> This document defines the active development roadmap for Ducky.
 > It should be treated as the current project plan.
 > Unless explicitly instructed, future tasks should follow this roadmap and should not redesign completed systems.
 
@@ -8,7 +8,7 @@
 
 # Vision
 
-PsyDuck is a desktop companion.
+Ducky is a desktop companion.
 
 It is **not** intended to become a productivity suite or calendar application.
 
@@ -93,7 +93,7 @@ Pomodoro Widget
 
 ↓
 
-PsyDuck
+Ducky
 
 Future widgets must integrate into this stack rather than positioning themselves manually.
 
@@ -140,9 +140,9 @@ Future assistant features should use the stored user name whenever appropriate.
 
 # Product Direction
 
-PsyDuck should feel like a desktop companion.
+Ducky should feel like a desktop companion.
 
-Do NOT turn PsyDuck into:
+Do NOT turn Ducky into:
 
 - Google Calendar
 - Outlook
@@ -211,7 +211,7 @@ Pomodoro
 
 ↓
 
-PsyDuck
+Ducky
 
 Provide:
 
@@ -243,7 +243,7 @@ Reuse ReminderService.
 
 Sticky Message
 
-Persistent message always visible above PsyDuck until removed.
+Persistent message always visible above Ducky until removed.
 
 Requirements:
 
@@ -312,7 +312,7 @@ No duplicate scheduling logic.
 
 Companion Personality
 
-Expand PsyDuck's personality.
+Expand Ducky's personality.
 
 Examples:
 

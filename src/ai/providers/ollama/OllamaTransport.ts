@@ -325,7 +325,7 @@ export class OllamaTransport {
           incomingHeaders.get('content-type') ?? 'application/json',
         host: this.endpoint.authority,
         'user-agent':
-          incomingHeaders.get('user-agent') ?? 'PsyDuck/Ollama',
+          incomingHeaders.get('user-agent') ?? 'Ducky/Ollama',
         ...(body.byteLength === 0
           ? {}
           : { 'content-length': body.byteLength }),

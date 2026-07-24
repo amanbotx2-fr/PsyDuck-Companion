@@ -143,7 +143,7 @@ export function UserNamePanel({
       </header>
 
       <p className="visually-hidden" id={descriptionId}>
-        Choose the name PsyDuck should use for you.
+        Choose the name Ducky should use for you.
       </p>
 
       <label

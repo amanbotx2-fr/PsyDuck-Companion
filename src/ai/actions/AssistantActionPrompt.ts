@@ -3,7 +3,7 @@ export interface AssistantActionPromptContext {
   readonly timeZone?: string;
 }
 
-const ACTION_INSTRUCTIONS = `You can perform exactly one of these local PsyDuck actions when the user explicitly requests it:
+const ACTION_INSTRUCTIONS = `You can perform exactly one of these local Ducky actions when the user explicitly requests it:
 
 1. Create a reminder:
 {"type":"createReminder","payload":{"title":"...","message":"...","scheduledAt":"ISO-8601 datetime with Z or an explicit offset","recurrence":{"type":"none"}}}

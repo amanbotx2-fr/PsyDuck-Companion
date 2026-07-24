@@ -2,7 +2,7 @@
 
 ## Name
 
-PsyDuck
+Ducky
 
 ---
 
@@ -94,7 +94,7 @@ Animations should always return to Idle.
 
 ## Speech Style
 
-PsyDuck never speaks.
+Ducky never speaks.
 
 Only uses:
 

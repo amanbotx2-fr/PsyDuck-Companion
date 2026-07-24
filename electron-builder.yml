@@ -1,5 +1,7 @@
-appId: com.psyduck.desktop
-productName: PsyDuck
+appId: com.ducky.desktop
+productName: Ducky
+executableName: Ducky
+copyright: Copyright © 2026 Aman
 asar: true
 
 directories:
@@ -12,14 +14,26 @@ files:
 extraResources:
   - from: character/master.png
     to: character/master.png
+  - from: assets/icons
+    to: assets/icons
 
 mac:
+  icon: assets/icons/icon.icns
   category: public.app-category.developer-tools
   hardenedRuntime: true
   gatekeeperAssess: false
+  extendInfo:
+    CFBundleName: Ducky
+    CFBundleDisplayName: Ducky
   target:
     - dmg
     - zip
+
+win:
+  icon: assets/icons/icon.ico
+
+linux:
+  icon: assets/icons/icon.png
 
 dmg:
   sign: false

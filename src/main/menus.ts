@@ -17,6 +17,7 @@ import {
 
 export interface ApplicationMenuActions {
   readonly showCompanion: () => void;
+  readonly showAbout: () => void;
   readonly openPreferences: () => void;
   readonly restart: () => void;
   readonly quit: () => void;
@@ -34,14 +35,38 @@ export interface ApplicationMenuActions {
   readonly requestDailyPlanner: () => void;
 }
 
-export const createApplicationMenu = (): Menu | null => {
+export const createApplicationMenu = (
+  showAbout: () => void,
+): Menu | null => {
   if (process.platform !== 'darwin') {
     return null;
   }
 
   // macOS dispatches standard text-editing accelerators through menu roles.
   return Menu.buildFromTemplate([
-    { role: 'appMenu' },
+    {
+      label: APP_NAME,
+      submenu: [
+        {
+          label: `About ${APP_NAME}`,
+          click: showAbout,
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        {
+          label: `Hide ${APP_NAME}`,
+          role: 'hide',
+        },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        {
+          label: `Quit ${APP_NAME}`,
+          role: 'quit',
+        },
+      ],
+    },
     { role: 'editMenu' },
   ]);
 };
@@ -203,6 +228,10 @@ export const createCompanionContextMenu = (
       label: 'Preferences…',
       click: actions.openPreferences,
     },
+    {
+      label: `About ${APP_NAME}`,
+      click: actions.showAbout,
+    },
     { type: 'separator' },
     {
       label: 'Restart',
@@ -225,6 +254,10 @@ export const createTrayMenu = (
     {
       label: 'Preferences…',
       click: actions.openPreferences,
+    },
+    {
+      label: `About ${APP_NAME}`,
+      click: actions.showAbout,
     },
     { type: 'separator' },
     {

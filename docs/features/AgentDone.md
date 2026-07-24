@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Agent Done is the short completion reaction that follows a successful external generation lifecycle. PsyDuck jumps, celebrates, emits a small burst of sparkle particles, lands, and returns to Idle. The reaction acknowledges completion without becoming a notification, score, or prolonged celebration.
+Agent Done is the short completion reaction that follows a successful external generation lifecycle. Ducky jumps, celebrates, emits a small burst of sparkle particles, lands, and returns to Idle. The reaction acknowledges completion without becoming a notification, score, or prolonged celebration.
 
 ## User story
 
@@ -28,15 +28,15 @@ As a developer waiting on a supported generation, I see one brief, cheerful jump
 
 # User Experience
 
-When the final tracked generation reports success, the Thinking bubble closes immediately. PsyDuck briefly crouches, jumps a small distance above its resting point, completes one quick authored spin near the apex, and releases a handful of pixel sparkles. It lands with a soft squash, settles, and becomes Idle.
+When the final tracked generation reports success, the Thinking bubble closes immediately. Ducky briefly crouches, jumps a small distance above its resting point, completes one quick authored spin near the apex, and releases a handful of pixel sparkles. It lands with a soft squash, settles, and becomes Idle.
 
 The full reaction lasts roughly 0.8–1.2 seconds at normal animation speed. It does not show text or buttons. Sparkles remain close to the character, fade through authored frames, and disappear before or shortly after recovery. The jump is expressive but small enough to remain inside the companion's safe window and avoid covering nearby work.
 
-If a successful completion occurs while PsyDuck is already celebrating, the current reaction is not restarted. At most one additional completion is coalesced into the existing celebration, normally by adding a second small sparkle emission at an approved marker. It never produces a chain of repeated jumps.
+If a successful completion occurs while Ducky is already celebrating, the current reaction is not restarted. At most one additional completion is coalesced into the existing celebration, normally by adding a second small sparkle emission at an approved marker. It never produces a chain of repeated jumps.
 
-Direct Drag interrupts immediately. The user can pick PsyDuck up during anticipation, flight, landing, or recovery; celebration particles disappear and Drag becomes authoritative. Reminders wait until celebration ends. Typing does not interrupt the reaction.
+Direct Drag interrupts immediately. The user can pick Ducky up during anticipation, flight, landing, or recovery; celebration particles disappear and Drag becomes authoritative. Reminders wait until celebration ends. Typing does not interrupt the reaction.
 
-With reduced motion, PsyDuck makes a brief happy pose with a tiny upward body shift and no free-flight jump or sparkles, then returns to Idle.
+With reduced motion, Ducky makes a brief happy pose with a tiny upward body shift and no free-flight jump or sparkles, then returns to Idle.
 
 # Behavior
 
@@ -136,7 +136,7 @@ The main process may persist the last consumed completion ID for a very short re
 
 The vertical body is separate from the general companion window position. Apply jump translation inside the scene so Electron window moves are not generated every frame. Before entry, the window expands upward and sideways around the character's fixed on-screen ground point. After particles and recovery finish, shrink safe bounds without moving that ground point.
 
-Use an analytical trajectory when possible: start height zero, apply configured initial velocity and gravity, clamp to ground, and emit one contact. Fixed-step integration is acceptable if it shares Physics Engine invariants. Frame stalls clamp delta; a stall beyond the full reaction snaps to the landing recovery rather than leaving PsyDuck airborne.
+Use an analytical trajectory when possible: start height zero, apply configured initial velocity and gravity, clamp to ground, and emit one contact. Fixed-step integration is acceptable if it shares Physics Engine invariants. Frame stalls clamp delta; a stall beyond the full reaction snaps to the landing recovery rather than leaving Ducky airborne.
 
 Required events are `agent.completion_ready`, `behavior.celebrate_started`, `animation.marker` for `takeoff`, `apex`, and `land`, `physics.ground_contact`, `particles.emitter_completed`, and `behavior.celebrate_completed`. Markers and completion callbacks include a behavior instance token so late events from an interrupted reaction are ignored.
 

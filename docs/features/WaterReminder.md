@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Water Reminder provides a quiet hydration prompt during long sessions. It schedules from a user-configurable interval, defaults to 45 minutes, presents a short PsyDuck animation and speech bubble, offers Dismiss and Snooze, and always resolves to Idle.
+Water Reminder provides a quiet hydration prompt during long sessions. It schedules from a user-configurable interval, defaults to 45 minutes, presents a short Ducky animation and speech bubble, offers Dismiss and Snooze, and always resolves to Idle.
 
 ## User story
 
@@ -28,11 +28,11 @@ As a developer who loses track of time, I receive an occasional, gentle reminder
 
 # User Experience
 
-Forty-five minutes after the last resolved water reminder—or after the scheduling baseline established at first launch—PsyDuck waits for an appropriate quiet moment. It performs a small attention animation, such as a short hop and wave, then opens a speech bubble reading “Drink Water!” with a droplet icon.
+Forty-five minutes after the last resolved water reminder—or after the scheduling baseline established at first launch—Ducky waits for an appropriate quiet moment. It performs a small attention animation, such as a short hop and wave, then opens a speech bubble reading “Drink Water!” with a droplet icon.
 
-The bubble presents Dismiss and Snooze. It appears beside PsyDuck, stays within the current display, and does not take focus from the user's editor or terminal. No native notification, sound, dock bounce, taskbar flash, or full-screen overlay is used.
+The bubble presents Dismiss and Snooze. It appears beside Ducky, stays within the current display, and does not take focus from the user's editor or terminal. No native notification, sound, dock bounce, taskbar flash, or full-screen overlay is used.
 
-Dismiss closes the bubble, lets PsyDuck complete a brief recovery pose, and schedules the next water reminder from the dismissal time using the configured interval. Snooze performs the same visual cleanup but schedules this reminder for 10 minutes later. Snoozing does not change the configured 45-minute interval.
+Dismiss closes the bubble, lets Ducky complete a brief recovery pose, and schedules the next water reminder from the dismissal time using the configured interval. Snooze performs the same visual cleanup but schedules this reminder for 10 minutes later. Snoozing does not change the configured 45-minute interval.
 
 If the user does not interact, the card remains available without pulsing or repeating the entrance animation. The character settles into a low-motion reminder hold. After five minutes with no action, the presentation closes quietly and is treated as a dismiss for scheduling purposes; it does not reopen immediately.
 
@@ -76,7 +76,7 @@ While waiting for user action, the reminder does not loop the attention animatio
 
 Dismiss and Snooze share the same exit animation; action semantics are communicated by the control and scheduling result rather than separate character theatrics. Timeout uses a shorter quiet bubble-close and neutral recovery.
 
-Animation-speed settings affect authored phases but do not alter reminder interval, snooze duration, display timeout, or quiet separation. Reduced motion removes the hop: PsyDuck raises one hand, the droplet bubble appears, and exit returns through a two-frame pose.
+Animation-speed settings affect authored phases but do not alter reminder interval, snooze duration, display timeout, or quiet separation. Reduced motion removes the hop: Ducky raises one hand, the droplet bubble appears, and exit returns through a two-frame pose.
 
 # State Flow
 
