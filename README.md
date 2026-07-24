@@ -12,7 +12,9 @@
 
 </div>
 
-![Ducky desktop companion](docs/images/hero.png)
+<p align="center">
+  <img src="docs/images/hero.png" alt="Ducky desktop companion">
+</p>
 
 Ducky lives quietly on your desktop, helps you stay focused, and gives AI a simple, personal place to live. It is lightweight, local-first, and designed to stay out of the way.
 
