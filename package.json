@@ -2,7 +2,7 @@
   "name": "ducky-desktop-companion",
   "productName": "Ducky",
   "desktopName": "ducky.desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Ducky desktop AI companion.",
   "author": "Aman",
