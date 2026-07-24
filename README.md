@@ -1,94 +1,77 @@
+<div align="center">
+
+<img src="assets/icons/icon.png" alt="Ducky" width="96" />
+
 # Ducky
 
-![Ducky](assets/icons/icon.png)
+### A small desktop AI companion for focused work.
 
-**Ducky is a tiny, privacy-conscious desktop AI companion for focused work and lightweight personal assistance.**
+![Version](https://img.shields.io/badge/version-1.0.0-5b6cff?style=flat-square)
+![Platforms](https://img.shields.io/badge/macOS%20%7C%20Windows%20%7C%20Linux-supported?style=flat-square)
+![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
-![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-informational)
-![License](https://img.shields.io/badge/license-MIT-green)
-
-## Screenshots
-
-The screenshots below were captured from the running Ducky desktop companion using a clean v1.0.0 development workspace.
-
-### Desktop companion
+</div>
 
 ![Ducky desktop companion](docs/images/hero.png)
 
-### AI conversation and focus timer
-
-![AI conversation](docs/images/chat.png)
-![Pomodoro timer](docs/images/pomodoro.png)
-
-### Preferences and planning
-
-![Preferences](docs/images/preferences.png)
-![Daily Planner](docs/images/planner.png)
-
-### Personal workspace
-
-![Sticky message](docs/images/sticky-notes.png)
-![Reminder manager](docs/images/reminders.png)
-
-### About
-
-![About Ducky](docs/images/about.png)
-
-The model explorer screenshot is captured separately when a provider with discoverable models is configured; no credentials or private provider data are included in repository screenshots.
+Ducky lives quietly on your desktop, helps you stay focused, and gives AI a simple, personal place to live. It is lightweight, local-first, and designed to stay out of the way.
 
 ## Features
 
-- Desktop companion with idle animation, eye tracking, and drag interaction
-- Multi-provider AI: OpenAI, Gemini, Grok, Ollama, and OpenAI-compatible endpoints such as OpenRouter
-- Smart one-time and recurring reminders with a daily planner
-- Persistent sticky message and Pomodoro focus timer
-- Searchable AI Model Explorer with favorites and recent models
-- Native tray, preferences, Spaces support, and always-on-top desktop behavior
-- Automatic update foundation and cross-platform packaging
+| | | |
+|---|---|---|
+| **AI companion**<br>Ask questions inline without opening a chat window. | **Smart reminders**<br>One-time and recurring reminders with a focused widget. | **Daily planner**<br>See today's schedule at a glance. |
+| **Sticky notes**<br>Keep one lightweight message visible. | **Pomodoro**<br>Run a persistent focus session beside Ducky. | **Model Explorer**<br>Search, favorite, and switch between discovered models. |
+| **Native desktop**<br>Tray, Preferences, Spaces, dragging, and always-on-top support. | **Cross-platform**<br>macOS, Windows, and Linux packaging. | **Update-ready**<br>Electron's secure update foundation is included. |
 
-## Installation
+## Screenshot gallery
 
-Download the v1.0.0 artifact for your platform from the GitHub Releases page.
-
-- **macOS:** open the `.dmg`, then drag Ducky to Applications.
-- **Windows:** run the Setup installer (or install the MSI package).
-- **Linux:** run the AppImage directly or install the `.deb` package.
+| Desktop | AI conversation |
+|---|---|
+| ![Desktop companion](docs/images/hero.png) | ![AI conversation](docs/images/chat.png) |
+| **Planner** | **Preferences** |
+| ![Daily Planner](docs/images/planner.png) | ![Preferences](docs/images/preferences.png) |
+| **Sticky message** | **Pomodoro** |
+| ![Sticky message](docs/images/sticky-notes.png) | ![Pomodoro](docs/images/pomodoro.png) |
+| **Reminders** | **About** |
+| ![Reminders](docs/images/reminders.png) | ![About Ducky](docs/images/about.png) |
 
 ## AI providers
 
-OpenAI, Gemini, and Grok require credentials from their respective providers. Ollama runs locally and uses the Ollama daemon at `http://localhost:11434` by default; no cloud API key is required. Custom OpenAI-compatible endpoints support services such as OpenRouter, LM Studio, vLLM, LiteLLM, and LocalAI.
+- **OpenAI, Gemini, and Grok** — cloud providers using your own API credentials.
+- **Ollama** — local models through the Ollama daemon; no cloud key required.
+- **OpenRouter and compatible endpoints** — connect to OpenAI-compatible model catalogs.
 
-Credentials remain in the main process and are stored using Electron's secure storage when available.
+Credentials stay in the Electron main process and use secure storage when available.
+
+## Install
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/amanbotx2-fr/PsyDuck-Companion/releases).
+
+- macOS: open the DMG and drag Ducky to Applications.
+- Windows: run the Setup or MSI installer.
+- Linux: launch the AppImage or install the DEB package.
 
 ## Build from source
 
-Requirements: Node.js 22.12 or newer and npm 10 or newer.
+Requires Node.js 22.12+ and npm 10+.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Create a production build and platform installer with:
+Build a production package with `npm run dist`.
 
-```bash
-npm run build
-npm run dist
-```
+## Repository layout
 
-## Project structure
-
-`src/main` contains Electron lifecycle, windows, IPC, persistence, and services. `src/renderer` contains the companion and Preferences React applications. `src/ai` contains provider abstractions and integrations. `src/engine` contains animation, behavior, input, and scheduling primitives. `src/shared` contains typed contracts shared across processes. `character` contains source art and animation frames; `assets/icons` contains application branding.
-
-## Technology
-
-Electron, React, TypeScript, Vite, Electron Builder, and Node.js. The renderer uses native browser APIs and CSS for UI motion; no external UI framework is required.
+`src/main` · Electron lifecycle, IPC, persistence, and services<br>
+`src/renderer` · Companion and Preferences React apps<br>
+`src/ai` · Provider abstractions and integrations<br>
+`src/engine` · Animation, behavior, input, and scheduling primitives<br>
+`src/shared` · Typed contracts shared across processes<br>
+`character` · Source artwork and animation frames
 
 ## License
 
-Ducky is released under the [MIT License](LICENSE).
-
-## Release notes
-
-See [`RELEASE_NOTES_v1.0.0.md`](RELEASE_NOTES_v1.0.0.md) for the v1.0.0 release summary.
+[MIT](LICENSE) © Aman
