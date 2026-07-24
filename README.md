@@ -26,15 +26,24 @@ Ducky lives quietly on your desktop, helps you stay focused, and gives AI a simp
 
 ## Screenshot gallery
 
-| Desktop | AI conversation |
-|---|---|
-| ![Desktop companion](docs/images/hero.png) | ![AI conversation](docs/images/chat.png) |
-| **Planner** | **Preferences** |
-| ![Daily Planner](docs/images/planner.png) | ![Preferences](docs/images/preferences.png) |
-| **Sticky message** | **Pomodoro** |
-| ![Sticky message](docs/images/sticky-notes.png) | ![Pomodoro](docs/images/pomodoro.png) |
-| **Reminders** | **About** |
-| ![Reminders](docs/images/reminders.png) | ![About Ducky](docs/images/about.png) |
+<table align="center">
+  <tr>
+    <td align="center"><strong>Desktop</strong><br><img src="docs/images/hero.png" alt="Ducky desktop companion" width="360"></td>
+    <td align="center"><strong>AI conversation</strong><br><img src="docs/images/chat.png" alt="AI conversation" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Planner</strong><br><img src="docs/images/planner.png" alt="Daily Planner" width="360"></td>
+    <td align="center"><strong>Preferences</strong><br><img src="docs/images/preferences.png" alt="Preferences" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Sticky message</strong><br><img src="docs/images/sticky-notes.png" alt="Sticky message" width="360"></td>
+    <td align="center"><strong>Pomodoro</strong><br><img src="docs/images/pomodoro.png" alt="Pomodoro" width="360"></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Reminders</strong><br><img src="docs/images/reminders.png" alt="Reminders" width="360"></td>
+    <td align="center"><strong>About</strong><br><img src="docs/images/about.png" alt="About Ducky" width="360"></td>
+  </tr>
+</table>
 
 ## AI providers
 
