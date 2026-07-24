@@ -1,6 +1,9 @@
+import type { AIConversationContextMessage } from '../../shared/aiConversation';
+
 export interface AssistantActionPromptContext {
   readonly now?: Date;
   readonly timeZone?: string;
+  readonly conversationHistory?: readonly AIConversationContextMessage[];
 }
 
 const ACTION_INSTRUCTIONS = `You can perform exactly one of these local Ducky actions when the user explicitly requests it:
@@ -44,16 +47,27 @@ export const createAssistantActionPrompt = (
 ): string => {
   const now = context.now ?? new Date();
   const timeZone = resolveTimeZone(context.timeZone);
+  const conversationHistory = context.conversationHistory ?? [];
 
   if (!Number.isFinite(now.getTime())) {
     throw new TypeError('Assistant action clock must be valid.');
   }
 
+  const conversationBlock =
+    conversationHistory.length === 0
+      ? ''
+      : `
+
+Prior conversation, oldest to newest:
+<conversation_history_json>
+${JSON.stringify(conversationHistory)}
+</conversation_history_json>`;
+
   return `${ACTION_INSTRUCTIONS}
 
 Current local date and time: ${formatLocalDateTime(now, timeZone)}
 IANA timezone: ${timeZone}
-Current UTC time: ${now.toISOString()}
+Current UTC time: ${now.toISOString()}${conversationBlock}
 
 <user_request>
 ${userPrompt}

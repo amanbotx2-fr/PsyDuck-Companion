@@ -355,8 +355,11 @@ const companionBridge: CompanionBridge = Object.freeze({
       reminderFiredListeners.delete(listener);
     };
   },
-  askAI: (prompt: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.askAI, prompt) as Promise<AIAskResult>,
+  askAI: (request: Parameters<CompanionBridge['askAI']>[0]) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.askAI,
+      request,
+    ) as Promise<AIAskResult>,
   startPomodoro: (durationMinutes: number) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.startPomodoro,

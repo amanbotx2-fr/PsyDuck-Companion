@@ -3,6 +3,7 @@ import type {
   AIProviderHttpDiagnostics,
   AIResponse,
 } from '../ai/AIProvider';
+import type { AIConversationRequest } from './aiConversation';
 import type { DailyPlannerBriefing } from './dailyPlanner';
 import type {
   PomodoroCompletionListener,
@@ -106,7 +107,7 @@ export interface CompanionBridge {
   readonly onReminderFired: (
     listener: ReminderFiredListener,
   ) => () => void;
-  readonly askAI: (prompt: string) => Promise<AIAskResult>;
+  readonly askAI: (request: AIConversationRequest) => Promise<AIAskResult>;
   readonly startPomodoro: (durationMinutes: number) => Promise<void>;
   readonly notifyCustomPomodoroPanelClosed: () => void;
   readonly onCustomPomodoroDurationRequested: (

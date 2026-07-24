@@ -6,6 +6,7 @@ import {
   type TransitionEvent,
 } from 'react';
 
+import type { AIConversationMessage } from '../../shared/aiConversation';
 import { speechBubbleMarkdownToPlainText } from '../../shared/speechBubbleMarkdown';
 import type {
   SpeechBubbleMessage,
@@ -17,8 +18,18 @@ import { SpeechBubbleMarkdown } from './SpeechBubbleMarkdown';
 export interface SpeechBubbleProps {
   readonly message: SpeechBubbleMessage | null;
   readonly visibility: SpeechBubbleVisibility;
+  readonly conversation?: SpeechBubbleConversation | undefined;
   readonly onExitTransitionEnd: () => void;
   readonly onContentReady: (messageId: number) => void;
+}
+
+export interface SpeechBubbleConversation {
+  readonly messages: readonly AIConversationMessage[];
+  readonly pinned: boolean;
+  readonly canContinue: boolean;
+  readonly onContinue: () => void;
+  readonly onClose: () => void;
+  readonly onTogglePin: () => void;
 }
 
 const VIEWPORT_GUTTER_PX = 8;
@@ -33,6 +44,7 @@ const normalizePendingLabel = (text: string): string => {
 export function SpeechBubble({
   message,
   visibility,
+  conversation,
   onExitTransitionEnd,
   onContentReady,
 }: SpeechBubbleProps) {
@@ -125,6 +137,7 @@ export function SpeechBubble({
     }
 
     let animationFrameId: number | null = null;
+    let shouldScrollToLatest = true;
     const updateLayout = (): void => {
       animationFrameId = null;
       const contentHeight = Math.min(
@@ -137,8 +150,12 @@ export function SpeechBubble({
         `${contentHeight}px`,
       );
 
-      if (message.typewriter) {
+      if (
+        (message.typewriter && !typewriter.complete) ||
+        shouldScrollToLatest
+      ) {
         scroll.scrollTop = scroll.scrollHeight;
+        shouldScrollToLatest = false;
       }
 
       updateGeometry();
@@ -162,7 +179,7 @@ export function SpeechBubble({
       resizeObserver.disconnect();
       window.removeEventListener('resize', scheduleLayoutUpdate);
     };
-  }, [messageId, message?.typewriter, updateGeometry]);
+  }, [messageId, message?.typewriter, typewriter.complete, updateGeometry]);
 
   if (message === null) {
     return null;
@@ -187,6 +204,14 @@ export function SpeechBubble({
   const visualText = message.typewriter
     ? typewriter.displayedText
     : message.text;
+  const conversationVisible =
+    message.variant === 'conversation' && conversation !== undefined;
+  const conversationMessages =
+    conversationVisible &&
+    message.pending &&
+    conversation.messages.at(-1)?.role === 'assistant'
+      ? conversation.messages.slice(0, -1)
+      : (conversation?.messages ?? []);
   const visualContent = message.pending ? (
     <div className="speech-bubble__pending" aria-hidden="true">
       <span className="speech-bubble__pending-label">
@@ -203,6 +228,77 @@ export function SpeechBubble({
   ) : (
     <p className="speech-bubble__plain-text">{visualText}</p>
   );
+  const conversationContent = conversationVisible ? (
+    <div
+      className="speech-bubble__transcript"
+      role="log"
+      aria-label="Conversation messages"
+      aria-live="polite"
+      aria-relevant="additions text"
+    >
+      {conversationMessages.map((conversationMessage, index) => {
+        const isLatestMessage =
+          index === conversationMessages.length - 1;
+        const typewritingLatestResponse =
+          conversationMessage.role === 'assistant' &&
+          isLatestMessage &&
+          message.typewriter &&
+          !typewriter.complete;
+        const content =
+          typewritingLatestResponse
+            ? visualText
+            : conversationMessage.content;
+
+        return (
+          <div
+            key={conversationMessage.id}
+            className="speech-bubble__turn"
+            data-role={conversationMessage.role}
+          >
+            <span className="speech-bubble__turn-speaker">
+              {conversationMessage.role === 'user' ? 'You' : 'Ducky'}
+            </span>
+            <div
+              className="speech-bubble__turn-content"
+              aria-hidden={
+                typewritingLatestResponse ? 'true' : undefined
+              }
+            >
+              {conversationMessage.role === 'assistant' ? (
+                <SpeechBubbleMarkdown text={content} />
+              ) : (
+                <p>{content}</p>
+              )}
+            </div>
+            {typewritingLatestResponse ? (
+              <span className="visually-hidden">
+                {speechBubbleMarkdownToPlainText(
+                  conversationMessage.content,
+                )}
+              </span>
+            ) : null}
+          </div>
+        );
+      })}
+      {message.pending ? (
+        <div
+          className="speech-bubble__turn"
+          data-role="assistant"
+        >
+          <span className="speech-bubble__turn-speaker">Ducky</span>
+          <div className="speech-bubble__turn-content">
+            {visualContent}
+          </div>
+          <span className="visually-hidden">Ducky is responding.</span>
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+  const continueDisabled =
+    !conversationVisible ||
+    !conversation.canContinue ||
+    (message.typewriter && !typewriter.complete);
+
   return (
     <div
       ref={bubbleRef}
@@ -211,18 +307,42 @@ export function SpeechBubble({
       data-variant={message.variant}
       data-pending={message.pending}
       data-typewriting={message.typewriter && !typewriter.complete}
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      aria-busy={message.typewriter && !typewriter.complete}
+      role={conversationVisible ? 'region' : 'status'}
+      aria-label={
+        conversationVisible ? 'Ducky conversation' : undefined
+      }
+      aria-live={conversationVisible ? undefined : 'polite'}
+      aria-atomic={conversationVisible ? undefined : 'true'}
+      aria-busy={
+        message.pending || (message.typewriter && !typewriter.complete)
+      }
       onTransitionEnd={handleTransitionEnd}
     >
       {message.variant === 'conversation' ? (
-        <div className="speech-bubble__header" aria-hidden="true">
+        <div className="speech-bubble__header">
           <span className="speech-bubble__speaker">Ducky</span>
-          {message.pending ? (
-            <span className="speech-bubble__state">Responding</span>
-          ) : null}
+          <div className="speech-bubble__header-actions">
+            {message.pending ? (
+              <span className="speech-bubble__state">Responding</span>
+            ) : null}
+            {conversationVisible ? (
+              <button
+                className="speech-bubble__pin"
+                type="button"
+                data-pinned={conversation.pinned}
+                aria-pressed={conversation.pinned}
+                aria-label={
+                  conversation.pinned
+                    ? 'Unpin conversation'
+                    : 'Pin conversation'
+                }
+                onClick={conversation.onTogglePin}
+              >
+                <span aria-hidden="true">📌</span>
+                {conversation.pinned ? 'Unpin' : 'Pin'}
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
       <div className="speech-bubble__layout">
@@ -239,18 +359,44 @@ export function SpeechBubble({
           <div
             ref={contentRef}
             className="speech-bubble__content"
-            aria-hidden={message.typewriter ? 'true' : undefined}
+            aria-hidden={
+              !conversationVisible && message.typewriter
+                ? 'true'
+                : undefined
+            }
           >
-            {visualContent}
+            {conversationVisible ? conversationContent : visualContent}
           </div>
-          {message.pending || message.typewriter ? (
+          {!conversationVisible &&
+          (message.pending || message.typewriter) ? (
             <span className="visually-hidden">
               {accessibleMessageText}
             </span>
           ) : null}
         </div>
       </div>
-      {message.actions.length > 0 ? (
+      {conversationVisible ? (
+        <div
+          className="speech-bubble__actions"
+          aria-label="Conversation actions"
+        >
+          <button
+            className="speech-bubble__action speech-bubble__action--primary"
+            type="button"
+            disabled={continueDisabled}
+            onClick={conversation.onContinue}
+          >
+            Continue Chat
+          </button>
+          <button
+            className="speech-bubble__action"
+            type="button"
+            onClick={conversation.onClose}
+          >
+            Close
+          </button>
+        </div>
+      ) : message.actions.length > 0 ? (
         <div
           className="speech-bubble__actions"
           aria-label="Response actions"

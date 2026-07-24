@@ -34,6 +34,7 @@ const ROOT_KEYS = [
   'reminders',
   'general',
   'water',
+  'notificationSounds',
   'updates',
   'ai',
   'aiModelExplorer',
@@ -95,6 +96,7 @@ const serializeSettings = (
   reminders: settings.reminders.map((reminder) => ({ ...reminder })),
   general: { ...settings.general },
   water: { ...settings.water },
+  notificationSounds: { ...settings.notificationSounds },
   updates: { ...settings.updates },
   ai: {
     enabled: settings.ai.enabled,
@@ -156,6 +158,9 @@ const parseSettingsDocument = (
       : { reminders: value.reminders }),
     general: value.general,
     water: value.water,
+    ...(value.notificationSounds === undefined
+      ? {}
+      : { notificationSounds: value.notificationSounds }),
     ...(value.updates === undefined
       ? {}
       : { updates: value.updates }),

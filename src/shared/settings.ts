@@ -3,6 +3,13 @@ import {
   parseStoredReminders,
   type Reminder,
 } from './reminders';
+import {
+  DEFAULT_NOTIFICATION_SOUND_SETTINGS,
+  mergeNotificationSoundSettings,
+  parseNotificationSoundSettingsPatch,
+  type NotificationSoundSettings,
+  type NotificationSoundSettingsPatch,
+} from './notificationSounds';
 
 export const WATER_REMINDER_INTERVAL_OPTIONS = [
   15,
@@ -245,6 +252,7 @@ export interface AppSettings {
   readonly reminders: readonly Reminder[];
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
+  readonly notificationSounds: NotificationSoundSettings;
   readonly updates: UpdateSettings;
   readonly ai: AiSettings;
   readonly aiModelExplorer: AiModelExplorerSettings;
@@ -255,6 +263,7 @@ export interface RuntimeSettings {
   readonly stickyMessage: string | null;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
+  readonly notificationSounds: NotificationSoundSettings;
 }
 
 export interface PreferencesAiSettings {
@@ -271,6 +280,7 @@ export interface PreferencesSettings {
   readonly userName: string;
   readonly general: GeneralSettings;
   readonly water: WaterSettings;
+  readonly notificationSounds: NotificationSoundSettings;
   readonly updates: UpdateSettings;
   readonly ai: PreferencesAiSettings;
   readonly aiModelExplorer: AiModelExplorerSettings;
@@ -310,6 +320,7 @@ export interface SettingsPatch {
   readonly reminders?: readonly Reminder[];
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
+  readonly notificationSounds?: NotificationSoundSettingsPatch;
   readonly updates?: UpdateSettingsPatch;
   readonly ai?: AiSettingsPatch;
   readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
@@ -318,6 +329,7 @@ export interface SettingsPatch {
 export interface PreferencesSettingsPatch {
   readonly general?: GeneralSettingsPatch;
   readonly water?: WaterSettingsPatch;
+  readonly notificationSounds?: NotificationSoundSettingsPatch;
   readonly updates?: UpdateSettingsPatch;
   readonly aiModelExplorer?: AiModelExplorerSettingsPatch;
 }
@@ -340,6 +352,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   water: {
     enabled: true,
     interval: 30,
+  },
+  notificationSounds: {
+    ...DEFAULT_NOTIFICATION_SOUND_SETTINGS,
   },
   updates: {
     automatic: false,
@@ -396,6 +411,7 @@ const ROOT_SETTING_KEYS = [
   'reminders',
   'general',
   'water',
+  'notificationSounds',
   'updates',
   'ai',
   'aiModelExplorer',
@@ -625,6 +641,10 @@ export const parseSettingsPatch = (
     value.general === undefined ? undefined : parseGeneralPatch(value.general);
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
+  const notificationSounds =
+    value.notificationSounds === undefined
+      ? undefined
+      : parseNotificationSoundSettingsPatch(value.notificationSounds);
   const updates =
     value.updates === undefined
       ? undefined
@@ -652,6 +672,7 @@ export const parseSettingsPatch = (
   if (
     general === null ||
     water === null ||
+    notificationSounds === null ||
     updates === null ||
     ai === null ||
     aiModelExplorer === null ||
@@ -670,6 +691,9 @@ export const parseSettingsPatch = (
     ...(reminders === undefined ? {} : { reminders }),
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
+    ...(notificationSounds === undefined
+      ? {}
+      : { notificationSounds }),
     ...(updates === undefined ? {} : { updates }),
     ...(ai === undefined ? {} : { ai }),
     ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
@@ -684,6 +708,7 @@ export const parsePreferencesSettingsPatch = (
     !hasOnlyKeys(value, [
       'general',
       'water',
+      'notificationSounds',
       'updates',
       'aiModelExplorer',
     ])
@@ -695,6 +720,10 @@ export const parsePreferencesSettingsPatch = (
     value.general === undefined ? undefined : parseGeneralPatch(value.general);
   const water =
     value.water === undefined ? undefined : parseWaterPatch(value.water);
+  const notificationSounds =
+    value.notificationSounds === undefined
+      ? undefined
+      : parseNotificationSoundSettingsPatch(value.notificationSounds);
   const updates =
     value.updates === undefined
       ? undefined
@@ -707,6 +736,7 @@ export const parsePreferencesSettingsPatch = (
   if (
     general === null ||
     water === null ||
+    notificationSounds === null ||
     updates === null ||
     aiModelExplorer === null
   ) {
@@ -716,6 +746,9 @@ export const parsePreferencesSettingsPatch = (
   return {
     ...(general === undefined ? {} : { general }),
     ...(water === undefined ? {} : { water }),
+    ...(notificationSounds === undefined
+      ? {}
+      : { notificationSounds }),
     ...(updates === undefined ? {} : { updates }),
     ...(aiModelExplorer === undefined ? {} : { aiModelExplorer }),
   };
@@ -764,6 +797,10 @@ export const mergeSettings = (
     ...settings.water,
     ...patch.water,
   },
+  notificationSounds: mergeNotificationSoundSettings(
+    settings.notificationSounds,
+    patch.notificationSounds ?? {},
+  ),
   updates: {
     ...settings.updates,
     ...patch.updates,
@@ -792,13 +829,18 @@ export const cloneSettings = (settings: AppSettings): AppSettings =>
 export const toRuntimeSettings = (
   settings: Pick<
     AppSettings,
-    'userName' | 'stickyMessage' | 'general' | 'water'
+    | 'userName'
+    | 'stickyMessage'
+    | 'general'
+    | 'water'
+    | 'notificationSounds'
   >,
 ): RuntimeSettings => ({
   userName: settings.userName,
   stickyMessage: settings.stickyMessage,
   general: { ...settings.general },
   water: { ...settings.water },
+  notificationSounds: { ...settings.notificationSounds },
 });
 
 export const toPreferencesSettings = (
@@ -843,6 +885,10 @@ export const mergePreferencesSettings = (
     ...settings.water,
     ...patch.water,
   },
+  notificationSounds: mergeNotificationSoundSettings(
+    settings.notificationSounds,
+    patch.notificationSounds ?? {},
+  ),
   updates: {
     ...settings.updates,
     ...patch.updates,

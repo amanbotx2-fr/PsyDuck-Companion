@@ -57,6 +57,9 @@ export function usePreferencesSettings(): PreferencesSettingsController {
           userName: runtimeSettings.userName,
           general: { ...runtimeSettings.general },
           water: { ...runtimeSettings.water },
+          notificationSounds: {
+            ...runtimeSettings.notificationSounds,
+          },
         }));
         setStatus('saved');
         setErrorMessage(null);

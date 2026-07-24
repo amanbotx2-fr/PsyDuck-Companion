@@ -10,6 +10,13 @@ import {
   PERSONALITY_TRIGGERS,
   personalityService,
 } from '../personality';
+import {
+  INITIAL_AI_CONVERSATION_STATE,
+  reduceAIConversation,
+  selectAIConversationContext,
+  type AIConversationAction,
+  type AIConversationState,
+} from '../shared/aiConversation';
 import type { DailyPlannerBriefing } from '../shared/dailyPlanner';
 import {
   createReminderUpdateInput,
@@ -65,6 +72,7 @@ import { usePomodoroState } from './hooks/usePomodoroState';
 import { useReminderNotifications } from './hooks/useReminderNotifications';
 import { useRuntimeSettings } from './hooks/useRuntimeSettings';
 import { useSpeechBubble } from './hooks/useSpeechBubble';
+import { notificationSoundService } from './services/NotificationSoundService';
 
 const PLACEHOLDER_BEHAVIORS: readonly BehaviorId[] = [
   BEHAVIOR_IDS.think,
@@ -86,33 +94,17 @@ const SETTINGS_MANAGED_REMINDER_STORAGE = {
   setItem: () => undefined,
 };
 
-type AIInteractionState =
-  | { readonly phase: 'idle' }
-  | { readonly phase: 'input-open' }
-  | {
-      readonly phase: 'thinking';
-      readonly requestId: number;
-      readonly startedAt: number;
-    }
-  | {
-      readonly phase: 'showing-response';
-      readonly requestId: number;
-      readonly messageId: number;
-    };
-
-const INITIAL_AI_INTERACTION_STATE: AIInteractionState = {
-  phase: 'idle',
-};
-
 export function App() {
   const animationControllerRef = useRef<PsyDuckAnimationController | null>(
     null,
   );
   const waterReminderRef = useRef<WaterReminder | null>(null);
-  const aiInteractionRef = useRef<AIInteractionState>(
-    INITIAL_AI_INTERACTION_STATE,
+  const aiConversationRef = useRef<AIConversationState>(
+    INITIAL_AI_CONVERSATION_STATE,
   );
+  const conversationSequenceRef = useRef(0);
   const requestSequenceRef = useRef(0);
+  const responseMessageIdRef = useRef<number | null>(null);
   const submissionInProgressRef = useRef(false);
   const responseDelayTimerRef = useRef<ReturnType<
     typeof globalThis.setTimeout
@@ -127,10 +119,11 @@ export function App() {
   const pomodoroCompletionSequenceRef = useRef(0);
   const waterReminderSequenceRef = useRef(0);
   const stickyMessageSaveSequenceRef = useRef(0);
+  const soundedReminderIdRef = useRef<string | null>(null);
   const returnToReminderManagerRef = useRef(false);
   const mountedRef = useRef(true);
-  const [aiInteraction, setAIInteraction] = useState<AIInteractionState>(
-    INITIAL_AI_INTERACTION_STATE,
+  const [aiConversation, setAIConversation] = useState<AIConversationState>(
+    INITIAL_AI_CONVERSATION_STATE,
   );
   const [chatInputPresent, setChatInputPresent] = useState(false);
   const [celebrating, setCelebrating] = useState(false);
@@ -182,10 +175,40 @@ export function App() {
   const speechBubble = useSpeechBubble();
   const reminderNotifications = useReminderNotifications();
 
-  const transitionAIInteraction = useCallback(
-    (nextState: AIInteractionState): void => {
-      aiInteractionRef.current = nextState;
-      setAIInteraction(nextState);
+  useEffect(() => {
+    notificationSoundService.configure(settings.notificationSounds);
+  }, [settings.notificationSounds]);
+
+  useEffect(() => {
+    const reminderId =
+      reminderNotifications.current?.reminder.id ?? null;
+
+    if (reminderId === null) {
+      soundedReminderIdRef.current = null;
+      return;
+    }
+
+    if (soundedReminderIdRef.current === reminderId) {
+      return;
+    }
+
+    soundedReminderIdRef.current = reminderId;
+    void notificationSoundService.play('reminder');
+  }, [reminderNotifications.current?.reminder.id]);
+
+  const transitionAIConversation = useCallback(
+    (action: AIConversationAction): AIConversationState => {
+      const nextState = reduceAIConversation(
+        aiConversationRef.current,
+        action,
+      );
+
+      if (nextState !== aiConversationRef.current) {
+        aiConversationRef.current = nextState;
+        setAIConversation(nextState);
+      }
+
+      return nextState;
     },
     [],
   );
@@ -198,47 +221,74 @@ export function App() {
   );
 
   const showAIResponse = useCallback(
-    (requestId: number, responseText: string): void => {
+    (
+      requestId: number,
+      responseText: string,
+      includeInContext: boolean,
+    ): void => {
       if (
         !mountedRef.current ||
-        aiInteractionRef.current.phase !== 'thinking' ||
-        aiInteractionRef.current.requestId !== requestId
+        aiConversationRef.current.phase !== 'generating' ||
+        aiConversationRef.current.requestId !== requestId
       ) {
         return;
       }
 
       const normalizedResponse = responseText.trim();
+      const content =
+        normalizedResponse.length > 0
+          ? normalizedResponse
+          : personalityService.getErrorMessage();
+      const nextState = transitionAIConversation({
+        type: 'receive-response',
+        requestId,
+        content,
+        includeInContext:
+          includeInContext && normalizedResponse.length > 0,
+      });
+
+      if (nextState.phase !== 'showing-response') {
+        return;
+      }
+
       speechBubble.clearQueue();
       speechBubble.hide();
       const messageId = speechBubble.show(
-        normalizedResponse.length > 0
-          ? normalizedResponse
-          : personalityService.getErrorMessage(),
+        content,
         {
           duration: AI_RESPONSE_DURATION_MS,
           format: 'markdown',
+          persistent: nextState.session.pinned,
           typewriter: true,
           variant: 'conversation',
         },
       );
 
+      responseMessageIdRef.current = messageId;
       submissionInProgressRef.current = false;
-      transitionAIInteraction({
-        phase: 'showing-response',
-        requestId,
-        messageId,
-      });
     },
     [
       speechBubble.clearQueue,
       speechBubble.hide,
       speechBubble.show,
-      transitionAIInteraction,
+      transitionAIConversation,
     ],
   );
 
   const scheduleAIResponse = useCallback(
-    (requestId: number, responseText: string, startedAt: number): void => {
+    (
+      requestId: number,
+      responseText: string,
+      includeInContext: boolean,
+      startedAt: number,
+    ): void => {
+      if (
+        aiConversationRef.current.phase !== 'generating' ||
+        aiConversationRef.current.requestId !== requestId
+      ) {
+        return;
+      }
+
       const elapsedTime = performance.now() - startedAt;
       const remainingDelay = Math.max(
         MINIMUM_THINKING_DURATION_MS - elapsedTime,
@@ -251,7 +301,7 @@ export function App() {
 
       responseDelayTimerRef.current = globalThis.setTimeout(() => {
         responseDelayTimerRef.current = null;
-        showAIResponse(requestId, responseText);
+        showAIResponse(requestId, responseText, includeInContext);
       }, remainingDelay);
     },
     [showAIResponse],
@@ -271,8 +321,29 @@ export function App() {
     }, CHAT_INPUT_CLOSE_TRANSITION_MS);
   }, []);
 
+  const closeAIConversation = useCallback((): void => {
+    if (aiConversationRef.current.phase === 'idle') {
+      return;
+    }
+
+    if (responseDelayTimerRef.current !== null) {
+      globalThis.clearTimeout(responseDelayTimerRef.current);
+      responseDelayTimerRef.current = null;
+    }
+
+    responseMessageIdRef.current = null;
+    submissionInProgressRef.current = false;
+    transitionAIConversation({ type: 'close' });
+    scheduleChatInputUnmount();
+    speechBubble.hide();
+  }, [
+    scheduleChatInputUnmount,
+    speechBubble.hide,
+    transitionAIConversation,
+  ]);
+
   const handlePsyDuckActivate = useCallback((): void => {
-    if (aiInteractionRef.current.phase !== 'idle') {
+    if (aiConversationRef.current.phase !== 'idle') {
       return;
     }
 
@@ -283,32 +354,80 @@ export function App() {
 
     setChatInputPresent(true);
     submissionInProgressRef.current = false;
+    responseMessageIdRef.current = null;
     speechBubble.clearQueue();
     speechBubble.hide();
-    transitionAIInteraction({ phase: 'input-open' });
+    conversationSequenceRef.current += 1;
+    transitionAIConversation({
+      type: 'start',
+      conversationId: conversationSequenceRef.current,
+    });
   }, [
     speechBubble.clearQueue,
     speechBubble.hide,
-    transitionAIInteraction,
+    transitionAIConversation,
   ]);
 
   const handleChatInputCancel = useCallback(
-    (_reason: ChatInputDismissReason): void => {
-      if (aiInteractionRef.current.phase !== 'input-open') {
+    (reason: ChatInputDismissReason): void => {
+      const currentState = aiConversationRef.current;
+
+      if (currentState.phase !== 'input-open') {
         return;
       }
 
-      submissionInProgressRef.current = false;
-      transitionAIInteraction({ phase: 'idle' });
-      scheduleChatInputUnmount();
+      if (
+        currentState.session.pinned &&
+        (reason === 'outside' || reason === 'window-blur')
+      ) {
+        return;
+      }
+
+      closeAIConversation();
     },
-    [scheduleChatInputUnmount, transitionAIInteraction],
+    [closeAIConversation],
   );
+
+  const handleContinueAIConversation = useCallback((): void => {
+    if (aiConversationRef.current.phase !== 'showing-response') {
+      return;
+    }
+
+    if (chatInputCloseTimerRef.current !== null) {
+      globalThis.clearTimeout(chatInputCloseTimerRef.current);
+      chatInputCloseTimerRef.current = null;
+    }
+
+    speechBubble.setCurrentPersistent(true);
+    submissionInProgressRef.current = false;
+    setChatInputPresent(true);
+    transitionAIConversation({ type: 'continue' });
+  }, [speechBubble.setCurrentPersistent, transitionAIConversation]);
+
+  const handleToggleAIConversationPin = useCallback((): void => {
+    const currentState = aiConversationRef.current;
+
+    if (currentState.phase === 'idle') {
+      return;
+    }
+
+    const pinned = !currentState.session.pinned;
+    const nextState = transitionAIConversation({
+      type: 'set-pinned',
+      pinned,
+    });
+
+    speechBubble.setCurrentPersistent(
+      nextState.phase === 'showing-response'
+        ? nextState.session.pinned
+        : true,
+    );
+  }, [speechBubble.setCurrentPersistent, transitionAIConversation]);
 
   const handleChatInputSubmit = useCallback(
     (prompt: string): void => {
       if (
-        aiInteractionRef.current.phase !== 'input-open' ||
+        aiConversationRef.current.phase !== 'input-open' ||
         submissionInProgressRef.current
       ) {
         return;
@@ -321,15 +440,26 @@ export function App() {
       }
 
       submissionInProgressRef.current = true;
+      const history = selectAIConversationContext(
+        aiConversationRef.current,
+      );
       requestSequenceRef.current += 1;
       const requestId = requestSequenceRef.current;
       const startedAt = performance.now();
 
-      transitionAIInteraction({
-        phase: 'thinking',
+      const nextState = transitionAIConversation({
+        type: 'submit',
+        prompt: normalizedPrompt,
         requestId,
         startedAt,
       });
+
+      if (nextState.phase !== 'generating') {
+        submissionInProgressRef.current = false;
+        return;
+      }
+
+      responseMessageIdRef.current = null;
       scheduleChatInputUnmount();
       speechBubble.clearQueue();
       speechBubble.hide();
@@ -339,12 +469,16 @@ export function App() {
         variant: 'conversation',
       });
 
-      const request = window.psyduck?.askAI(normalizedPrompt);
+      const request = window.psyduck?.askAI({
+        prompt: normalizedPrompt,
+        history,
+      });
 
       if (request === undefined) {
         scheduleAIResponse(
           requestId,
           personalityService.getAIUnavailableMessage(),
+          false,
           startedAt,
         );
         return;
@@ -355,6 +489,7 @@ export function App() {
           scheduleAIResponse(
             requestId,
             result.ok ? result.response.content : result.message,
+            result.ok,
             startedAt,
           );
         },
@@ -362,6 +497,7 @@ export function App() {
           scheduleAIResponse(
             requestId,
             personalityService.getAIUnavailableMessage(),
+            false,
             startedAt,
           );
         },
@@ -373,7 +509,7 @@ export function App() {
       speechBubble.clearQueue,
       speechBubble.hide,
       speechBubble.show,
-      transitionAIInteraction,
+      transitionAIConversation,
     ],
   );
 
@@ -664,6 +800,7 @@ export function App() {
     }
 
     return bridge.onPomodoroCompleted(() => {
+      void notificationSoundService.play('pomodoro');
       pomodoroCompletionSequenceRef.current += 1;
       const sourceEventId =
         `pomodoro-completion-${pomodoroCompletionSequenceRef.current}`;
@@ -678,7 +815,7 @@ export function App() {
         setCelebrating(false);
       }, POMODORO_CELEBRATION_DURATION_MS);
 
-      if (aiInteractionRef.current.phase === 'idle') {
+      if (aiConversationRef.current.phase === 'idle') {
         showPomodoroCompletion(sourceEventId);
       } else {
         pendingPomodoroCompletionRef.current = sourceEventId;
@@ -781,29 +918,31 @@ export function App() {
     const pendingCompletionId = pendingPomodoroCompletionRef.current;
 
     if (
-      aiInteraction.phase === 'idle' &&
+      aiConversation.phase === 'idle' &&
       pendingCompletionId !== null
     ) {
       showPomodoroCompletion(pendingCompletionId);
     }
-  }, [aiInteraction.phase, showPomodoroCompletion]);
+  }, [aiConversation.phase, showPomodoroCompletion]);
 
   useEffect(() => {
     if (
-      aiInteraction.phase !== 'showing-response' ||
-      speechBubble.currentMessage?.id !== aiInteraction.messageId
+      aiConversation.phase !== 'showing-response' ||
+      speechBubble.currentMessage?.id !== responseMessageIdRef.current
     ) {
       return;
     }
 
     if (speechBubble.visibility === 'exiting') {
-      transitionAIInteraction({ phase: 'idle' });
+      responseMessageIdRef.current = null;
+      submissionInProgressRef.current = false;
+      transitionAIConversation({ type: 'close' });
     }
   }, [
-    aiInteraction,
+    aiConversation.phase,
     speechBubble.currentMessage,
     speechBubble.visibility,
-    transitionAIInteraction,
+    transitionAIConversation,
   ]);
 
   useEffect(() => {
@@ -973,7 +1112,7 @@ export function App() {
       data-celebrating={celebrating}
     >
       <PsyDuck
-        activationEnabled={aiInteraction.phase === 'idle'}
+        activationEnabled={aiConversation.phase === 'idle'}
         eyeTrackingEnabled={settings.general.eyeTracking}
         onActivate={handlePsyDuckActivate}
         onAnimationControllerChange={handleAnimationControllerChange}
@@ -984,7 +1123,7 @@ export function App() {
   return (
     <main
       className="app-shell"
-      data-ai-state={aiInteraction.phase}
+      data-ai-state={aiConversation.phase}
       data-pomodoro-running={pomodoroState.running}
       data-custom-pomodoro-panel-open={customPomodoroPanelOpen}
       data-user-name-panel-open={userNamePanelOpen}
@@ -1103,7 +1242,7 @@ export function App() {
             className="companion-widget--ai"
           >
             <ChatInputBubble
-              open={aiInteraction.phase === 'input-open'}
+              open={aiConversation.phase === 'input-open'}
               onCancel={handleChatInputCancel}
               onSubmit={handleChatInputSubmit}
             />
@@ -1119,6 +1258,19 @@ export function App() {
             <SpeechBubble
               message={speechBubble.currentMessage}
               visibility={speechBubble.visibility}
+              conversation={
+                aiConversation.phase === 'idle'
+                  ? undefined
+                  : {
+                      messages: aiConversation.session.messages,
+                      pinned: aiConversation.session.pinned,
+                      canContinue:
+                        aiConversation.phase === 'showing-response',
+                      onContinue: handleContinueAIConversation,
+                      onClose: closeAIConversation,
+                      onTogglePin: handleToggleAIConversationPin,
+                    }
+              }
               onExitTransitionEnd={
                 speechBubble.notifyExitTransitionEnd
               }

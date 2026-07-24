@@ -58,6 +58,7 @@ export interface SpeechBubbleApi {
   ) => number;
   readonly hide: () => void;
   readonly clearQueue: () => void;
+  readonly setCurrentPersistent: (persistent: boolean) => void;
 }
 
 export interface SpeechBubbleController extends SpeechBubbleApi {
@@ -218,6 +219,34 @@ class SpeechBubbleStore {
     );
   };
 
+  readonly setCurrentPersistent = (persistent: boolean): void => {
+    const { currentMessage, visibility } = this.snapshot;
+
+    if (
+      currentMessage === null ||
+      currentMessage.persistent === persistent
+    ) {
+      return;
+    }
+
+    const nextMessage = {
+      ...currentMessage,
+      persistent,
+    };
+
+    this.clearAutoHideTimer();
+    this.publish(nextMessage, visibility);
+
+    if (
+      !persistent &&
+      visibility === 'visible' &&
+      (!nextMessage.typewriter ||
+        this.contentReadyMessageId === nextMessage.id)
+    ) {
+      this.scheduleAutoHide(nextMessage);
+    }
+  };
+
   readonly completeExit = (): void => {
     if (this.snapshot.visibility !== 'exiting') {
       return;
@@ -351,6 +380,8 @@ export const show: SpeechBubbleApi['show'] = speechBubbleStore.show;
 export const hide: SpeechBubbleApi['hide'] = speechBubbleStore.hide;
 export const clearQueue: SpeechBubbleApi['clearQueue'] =
   speechBubbleStore.clearQueue;
+export const setCurrentPersistent: SpeechBubbleApi['setCurrentPersistent'] =
+  speechBubbleStore.setCurrentPersistent;
 
 export function useSpeechBubble(): SpeechBubbleController {
   const snapshot = useSyncExternalStore(
@@ -364,6 +395,7 @@ export function useSpeechBubble(): SpeechBubbleController {
     show,
     hide,
     clearQueue,
+    setCurrentPersistent,
     notifyExitTransitionEnd: speechBubbleStore.completeExit,
     notifyContentReady: speechBubbleStore.notifyContentReady,
   };

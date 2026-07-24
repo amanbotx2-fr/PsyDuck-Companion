@@ -167,7 +167,7 @@ body {
 .speech-bubble__header {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   border-bottom: 1px solid rgb(35 52 69 / 10%);
@@ -187,6 +187,14 @@ body {
   white-space: nowrap;
 }
 
+.speech-bubble__header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .speech-bubble__state {
   flex: 0 0 auto;
   color: rgb(93 101 109);
@@ -194,6 +202,40 @@ body {
   font-weight: 520;
   letter-spacing: 0.01em;
   line-height: 1.2;
+}
+
+.speech-bubble__pin {
+  display: inline-flex;
+  min-width: 54px;
+  min-height: 24px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 7px;
+  border: 1px solid rgb(35 52 69 / 13%);
+  border-radius: 7px;
+  background: transparent;
+  color: rgb(66 78 89);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 620;
+  line-height: 1;
+}
+
+.speech-bubble__pin:hover {
+  background: oklch(0.38 0.03 245 / 0.08);
+}
+
+.speech-bubble__pin[data-pinned='true'] {
+  border-color: rgb(53 79 103 / 24%);
+  background: oklch(0.91 0.025 245 / 0.72);
+  color: rgb(35 61 84);
+}
+
+.speech-bubble__pin:focus-visible {
+  outline: 2px solid rgb(78 108 137 / 55%);
+  outline-offset: 2px;
 }
 
 .speech-bubble__layout {
@@ -239,6 +281,45 @@ body {
   min-height: 1lh;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+.speech-bubble__transcript {
+  display: grid;
+  gap: 9px;
+}
+
+.speech-bubble__turn {
+  display: grid;
+  gap: 3px;
+}
+
+.speech-bubble__turn + .speech-bubble__turn {
+  padding-top: 9px;
+  border-top: 1px solid rgb(35 52 69 / 9%);
+}
+
+.speech-bubble__turn-speaker {
+  color: rgb(90 99 107);
+  font-size: 10px;
+  font-weight: 680;
+  letter-spacing: 0.015em;
+  line-height: 1.2;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.speech-bubble__turn[data-role='assistant']
+  .speech-bubble__turn-speaker {
+  color: rgb(35 68 97);
+}
+
+.speech-bubble__turn-content {
+  min-width: 0;
+}
+
+.speech-bubble__turn-content > p {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .speech-bubble__plain-text {
@@ -363,6 +444,11 @@ body {
   padding: 6px 9px;
 }
 
+.speech-bubble__action--primary {
+  border-color: rgb(53 79 103 / 22%);
+  background: oklch(0.91 0.025 245 / 0.72);
+}
+
 .speech-bubble__action:hover {
   background: rgb(35 52 69 / 10%);
 }
@@ -374,6 +460,13 @@ body {
 .speech-bubble__action:focus-visible {
   outline: 2px solid rgb(78 108 137 / 55%);
   outline-offset: 2px;
+}
+
+.speech-bubble__action:disabled {
+  background: rgb(35 52 69 / 4%);
+  color: rgb(83 94 104 / 55%);
+  cursor: default;
+  opacity: 0.78;
 }
 
 @keyframes speech-bubble-typing {
@@ -1424,6 +1517,13 @@ body {
 
   .chat-input-bubble__input {
     color: CanvasText;
+  }
+
+  .speech-bubble__pin,
+  .speech-bubble__action {
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
   }
 
   .floating-companion-panel__input,

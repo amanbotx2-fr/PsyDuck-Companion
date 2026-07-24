@@ -14,6 +14,12 @@ import {
   type ModelExplorerSource,
 } from '../shared/modelMetadata';
 import {
+  isNotificationSoundId,
+  isNotificationSoundVolume,
+  mergeNotificationSoundSettings,
+  NOTIFICATION_SOUND_OPTIONS,
+} from '../shared/notificationSounds';
+import {
   AI_PROVIDER_OPTIONS,
   isAiProvider,
   isValidAiEndpoint,
@@ -29,6 +35,7 @@ import { personalityService } from '../personality';
 import { AIModelExplorer } from './components/AIModelExplorer';
 import { usePreferencesSettings } from './hooks/usePreferencesSettings';
 import { useUpdateStatus } from './hooks/useUpdateStatus';
+import { notificationSoundService } from './services/NotificationSoundService';
 
 interface PreferenceRowProps {
   readonly control: ReactNode;
@@ -105,6 +112,7 @@ type ModelLoadingStatus =
 
 const INITIAL_CONNECTION_STATUS: ConnectionStatus = { phase: 'idle' };
 const INITIAL_MODEL_LOADING_STATUS: ModelLoadingStatus = { phase: 'idle' };
+type SoundTestStatus = 'idle' | 'testing' | 'played' | 'error';
 
 export function PreferencesApp() {
   const {
@@ -132,6 +140,8 @@ export function PreferencesApp() {
     useState<ConnectionStatus>(INITIAL_CONNECTION_STATUS);
   const [modelLoadingStatus, setModelLoadingStatus] =
     useState<ModelLoadingStatus>(INITIAL_MODEL_LOADING_STATUS);
+  const [soundTestStatus, setSoundTestStatus] =
+    useState<SoundTestStatus>('idle');
   const settingsAreLoading = status === 'loading';
   const updateCheckInProgress =
     updateStatus?.phase === 'checking' ||
@@ -162,6 +172,11 @@ export function PreferencesApp() {
   useEffect(() => {
     modelExplorerPreferencesRef.current = settings.aiModelExplorer;
   }, [settings.aiModelExplorer]);
+
+  useEffect(() => {
+    notificationSoundService.configure(settings.notificationSounds);
+    setSoundTestStatus('idle');
+  }, [settings.notificationSounds]);
 
   useEffect(() => {
     if (aiDirty) {
@@ -508,6 +523,56 @@ export function PreferencesApp() {
       save({ water: { interval } });
     }
   };
+  const updateNotificationSoundSettings = (
+    patch: PreferencesSettingsPatch['notificationSounds'],
+  ): void => {
+    if (patch === undefined) {
+      return;
+    }
+
+    notificationSoundService.configure(
+      mergeNotificationSoundSettings(
+        settings.notificationSounds,
+        patch,
+      ),
+    );
+    save({ notificationSounds: patch });
+  };
+  const handleNotificationSoundChange = (
+    event: ChangeEvent<HTMLSelectElement>,
+  ): void => {
+    const sound = event.currentTarget.value;
+
+    if (isNotificationSoundId(sound)) {
+      updateNotificationSoundSettings({ sound });
+    }
+  };
+  const handleNotificationVolumeChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ): void => {
+    const volume = Number(event.currentTarget.value);
+
+    if (isNotificationSoundVolume(volume)) {
+      updateNotificationSoundSettings({ volume });
+    }
+  };
+  const handleNotificationSoundTest = async (): Promise<void> => {
+    setSoundTestStatus('testing');
+    const played = await notificationSoundService.test();
+    setSoundTestStatus(played ? 'played' : 'error');
+  };
+  const selectedNotificationSoundLabel =
+    NOTIFICATION_SOUND_OPTIONS.find(
+      ({ id }) => id === settings.notificationSounds.sound,
+    )?.label ?? 'Selected sound';
+  const soundTestDescription =
+    soundTestStatus === 'testing'
+      ? `Starting ${selectedNotificationSoundLabel}…`
+      : soundTestStatus === 'played'
+        ? `${selectedNotificationSoundLabel} is playing.`
+        : soundTestStatus === 'error'
+          ? 'The selected sound could not be played.'
+          : 'Play the selected sound at the current volume.';
   const updateStatusMessage =
     updateStatus === null
       ? 'Loading update status…'
@@ -606,6 +671,112 @@ export function PreferencesApp() {
                 save({ general: { eyeTracking } });
               }}
             />
+          }
+        />
+      </section>
+
+      <section
+        className="preferences-section"
+        aria-labelledby="notification-sounds-title"
+      >
+        <div className="preferences-section__heading">
+          <h2 id="notification-sounds-title">Notification Sounds</h2>
+          <p>Gentle alerts</p>
+        </div>
+
+        <PreferenceRow
+          htmlFor="notification-sounds-enabled"
+          label="Enable notification sounds"
+          description="Play a short sound for completed timers and reminders."
+          control={
+            <SettingsSwitch
+              id="notification-sounds-enabled"
+              label="Enable notification sounds"
+              checked={settings.notificationSounds.enabled}
+              disabled={settingsAreLoading}
+              onChange={(enabled) => {
+                updateNotificationSoundSettings({ enabled });
+              }}
+            />
+          }
+        />
+
+        <PreferenceRow
+          htmlFor="notification-sound"
+          label="Sound"
+          description="Used for Pomodoro completions and reminders."
+          control={
+            <select
+              className="settings-select"
+              id="notification-sound"
+              value={settings.notificationSounds.sound}
+              disabled={
+                settingsAreLoading ||
+                !settings.notificationSounds.enabled
+              }
+              onChange={handleNotificationSoundChange}
+            >
+              {NOTIFICATION_SOUND_OPTIONS.map((sound) => (
+                <option key={sound.id} value={sound.id}>
+                  {sound.label}
+                </option>
+              ))}
+            </select>
+          }
+        />
+
+        <PreferenceRow
+          htmlFor="notification-volume"
+          label="Volume"
+          description="Changes Ducky sounds only, not system volume."
+          control={
+            <div className="notification-volume-control">
+              <input
+                className="settings-range"
+                id="notification-volume"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={settings.notificationSounds.volume}
+                disabled={
+                  settingsAreLoading ||
+                  !settings.notificationSounds.enabled
+                }
+                aria-valuetext={`${settings.notificationSounds.volume}%`}
+                onChange={handleNotificationVolumeChange}
+              />
+              <output
+                className="settings-value notification-volume-control__value"
+                htmlFor="notification-volume"
+              >
+                {settings.notificationSounds.volume}%
+              </output>
+            </div>
+          }
+        />
+
+        <PreferenceRow
+          htmlFor="test-notification-sound"
+          label="Test sound"
+          description={soundTestDescription}
+          control={
+            <button
+              className="settings-button settings-button--secondary"
+              id="test-notification-sound"
+              type="button"
+              disabled={
+                settingsAreLoading ||
+                !settings.notificationSounds.enabled ||
+                settings.notificationSounds.volume === 0 ||
+                soundTestStatus === 'testing'
+              }
+              onClick={() => {
+                void handleNotificationSoundTest();
+              }}
+            >
+              <span aria-hidden="true">🔊</span> Test
+            </button>
           }
         />
       </section>
@@ -1065,8 +1236,8 @@ export function PreferencesApp() {
       </section>
 
       <footer className="preferences-footer">
-        General, hydration, and update changes save automatically. AI
-        changes apply when saved.
+        General, sound, hydration, and update changes save automatically.
+        AI changes apply when saved.
       </footer>
     </main>
   );

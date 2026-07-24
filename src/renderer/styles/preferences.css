@@ -271,6 +271,7 @@ select {
 }
 
 .settings-switch:focus-visible,
+.settings-range:focus-visible,
 .settings-select:focus-visible,
 .settings-input:focus-visible,
 .settings-button:focus-visible,
@@ -285,11 +286,32 @@ select {
 }
 
 .settings-switch:disabled,
+.settings-range:disabled,
 .settings-select:disabled,
 .settings-input:disabled,
 .settings-button:disabled {
   cursor: not-allowed;
   opacity: 0.5;
+}
+
+.notification-volume-control {
+  display: grid;
+  min-width: 210px;
+  grid-template-columns: minmax(130px, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-range {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent-strong);
+  cursor: pointer;
+  outline: none;
+}
+
+.notification-volume-control__value {
+  text-align: right;
 }
 
 .model-explorer-trigger:disabled {
@@ -1011,6 +1033,10 @@ select {
     width: 100%;
   }
 
+  .notification-volume-control {
+    width: 100%;
+  }
+
   .credential-control {
     width: 100%;
   }
@@ -1094,6 +1120,7 @@ select {
 
 @media (prefers-reduced-motion: reduce) {
   .settings-switch,
+  .settings-range,
   .settings-switch::after,
   .settings-select,
   .settings-input,
@@ -1111,6 +1138,7 @@ select {
 
 @media (forced-colors: active) {
   .settings-switch,
+  .settings-range,
   .settings-select,
   .settings-input,
   .settings-button,

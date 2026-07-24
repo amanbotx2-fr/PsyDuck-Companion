@@ -32,6 +32,7 @@ import {
   OllamaEndpointPolicyError,
 } from '../ai/providers/ollama/OllamaEndpointPolicy';
 import { personalityService } from '../personality';
+import { parseAIConversationRequest } from '../shared/aiConversation';
 import { IPC_CHANNELS } from '../shared/events';
 import {
   isPomodoroDuration,
@@ -107,7 +108,6 @@ import {
 const CURSOR_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const MAX_ABSOLUTE_WINDOW_COORDINATE = 100_000;
 const MAX_COMPANION_CONTENT_HEIGHT = 10_000;
-const MAX_AI_PROMPT_LENGTH = 4_096;
 const SETTINGS_FILE_NAME = 'settings.json';
 const POMODORO_FILE_NAME = 'pomodoro.json';
 const API_KEY_PROVIDERS: ReadonlySet<AiProviderSelection> = new Set([
@@ -1074,25 +1074,13 @@ const handleAskAI = async (
       'companion',
       'chat',
       async (signal) => {
-        if (typeof value !== 'string') {
-          throw new TypeError('AI prompt must be a string.');
-        }
-
-        const prompt = value.trim();
-
-        if (prompt.length === 0) {
-          throw new TypeError('AI prompt must not be empty.');
-        }
-
-        if (prompt.length > MAX_AI_PROMPT_LENGTH) {
-          throw new RangeError(
-            `AI prompt must not exceed ${MAX_AI_PROMPT_LENGTH} characters.`,
-          );
-        }
+        const request = parseAIConversationRequest(value);
 
         try {
           const response = await getAIService().ask(
-            createAssistantActionPrompt(prompt),
+            createAssistantActionPrompt(request.prompt, {
+              conversationHistory: request.history,
+            }),
             { signal },
           );
 

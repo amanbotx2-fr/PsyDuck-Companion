@@ -282,6 +282,27 @@ describe('assistant action prompt', () => {
     );
   });
 
+  test('includes prior conversation separately from the current request', () => {
+    const prompt = createAssistantActionPrompt('Can you expand on that?', {
+      now: new Date('2030-01-01T12:00:00.000Z'),
+      timeZone: 'UTC',
+      conversationHistory: [
+        { role: 'user', content: 'Give me a short release checklist.' },
+        { role: 'assistant', content: 'Build, verify, tag, and publish.' },
+      ],
+    });
+
+    assert.match(prompt, /<conversation_history_json>/);
+    assert.match(
+      prompt,
+      /"role":"assistant","content":"Build, verify, tag, and publish\."/,
+    );
+    assert.match(
+      prompt,
+      /<user_request>\nCan you expand on that\?\n<\/user_request>/,
+    );
+  });
+
   test('does not interpret unrelated JSON as an action', () => {
     assert.deepEqual(
       interpretAssistantResponse('{"answer":42}'),
