@@ -57,7 +57,7 @@ Credentials stay in the Electron main process and use secure storage when availa
 
 ## Install
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/amanbotx2-fr/PsyDuck-Companion/releases).
+Download the latest release for your platform from [GitHub Releases](https://github.com/amanbotx2-fr/Ducky/releases).
 
 - macOS: open the DMG and drag Ducky to Applications.
 - Windows: run the Setup or MSI installer.
@@ -73,6 +73,12 @@ npm run dev
 ```
 
 Build a production package with `npm run dist`.
+
+## Releasing
+
+Stable releases are built for macOS, Windows, and Linux when a matching
+`vX.Y.Z` tag is pushed. See the [automated release process](docs/RELEASING.md)
+for versioning, tagging, outputs, permissions, and failure behavior.
 
 ## Repository layout
 

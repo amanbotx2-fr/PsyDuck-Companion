@@ -31,7 +31,7 @@ extraResources:
 publish:
   provider: github
   owner: amanbotx2-fr
-  repo: PsyDuck-Companion
+  repo: Ducky
   channel: latest
   releaseType: release
 
@@ -45,8 +45,12 @@ mac:
     CFBundleName: Ducky
     CFBundleDisplayName: Ducky
   target:
-    - dmg
-    - zip
+    - target: dmg
+      arch:
+        - universal
+    - target: zip
+      arch:
+        - universal
 
 win:
   icon: icons/icon.ico

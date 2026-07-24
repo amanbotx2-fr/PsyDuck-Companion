@@ -24,6 +24,7 @@
     "dist:mac": "npm run build && npm run clean:artifacts && electron-builder --mac",
     "dist:win": "npm run build && npm run clean:artifacts && electron-builder --win",
     "dist:linux": "npm run build && npm run clean:artifacts && electron-builder --linux",
+    "release:verify": "node scripts/verify-release-artifacts.mjs",
     "start": "electron ."
   },
   "dependencies": {
