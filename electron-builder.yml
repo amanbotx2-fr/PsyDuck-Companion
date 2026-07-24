@@ -32,6 +32,8 @@ publish:
   provider: github
   owner: amanbotx2-fr
   repo: PsyDuck-Companion
+  channel: latest
+  releaseType: release
 
 mac:
   icon: icons/icon.icns
